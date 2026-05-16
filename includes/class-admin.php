@@ -448,6 +448,12 @@ class EPD_Admin {
 				}
 
 				if ( $form_id ) {
+					// Adiciona campos UTM fixos ao final de cada formulário.
+					// Eles são injetados pelo epd-utm.js e sempre disponíveis para mapeamento.
+					foreach ( $this->get_utm_fields() as $utm_field ) {
+						$fields[] = $utm_field;
+					}
+
 					$forms[] = array(
 						'id'     => $form_id,
 						'name'   => $form_name,
@@ -460,6 +466,20 @@ class EPD_Admin {
 				$this->find_forms_in_elements( $element['elements'], $forms );
 			}
 		}
+	}
+
+	/**
+	 * Retorna os campos UTM fixos que o plugin captura automaticamente.
+	 * Sempre disponíveis para mapeamento em qualquer formulário.
+	 */
+	public function get_utm_fields() {
+		return array(
+			array( 'id' => 'epd_utm_source',   'label' => '📍 UTM Source',   'type' => 'utm' ),
+			array( 'id' => 'epd_utm_medium',   'label' => '📍 UTM Medium',   'type' => 'utm' ),
+			array( 'id' => 'epd_utm_campaign', 'label' => '📍 UTM Campaign', 'type' => 'utm' ),
+			array( 'id' => 'epd_utm_term',     'label' => '📍 UTM Term',     'type' => 'utm' ),
+			array( 'id' => 'epd_utm_content',  'label' => '📍 UTM Content',  'type' => 'utm' ),
+		);
 	}
 
 	/**

@@ -46,6 +46,12 @@ class EPD_Elementor_Handler {
 			return;
 		}
 
+		// Captura UTMs e injeta no $submitted como campos mapeáveis (epd_utm_*).
+		$utms = $this->extract_utms();
+		foreach ( $utms as $key => $value ) {
+			$submitted[ 'epd_' . $key ] = $value;
+		}
+
 		$mapper = new EPD_Field_Mapper();
 		$data   = $mapper->map(
 			$submitted,
@@ -60,7 +66,7 @@ class EPD_Elementor_Handler {
 		$result = $this->send_to_pipedrive( $data );
 
 		if ( ! empty( $mapping->webhook_url ) ) {
-			$this->fire_webhook( $mapping->webhook_url, $result );
+			$this->fire_webhook( $mapping->webhook_url, $result, $utms );
 		}
 	}
 
@@ -185,14 +191,58 @@ class EPD_Elementor_Handler {
 	}
 
 	/**
-	 * Dispara um POST para a URL de webhook com os dados criados no Pipedrive.
+	 * Lê os UTMs do POST (injetados pelo epd-utm.js como hidden fields)
+	 * com fallback para o cookie persistido pelo JS no navegador.
+	 *
+	 * @return array ['utm_source' => '...', ...]  Apenas os UTMs presentes.
 	 */
-	private function fire_webhook( $url, array $created ) {
+	private function extract_utms() {
+		$keys = array( 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content' );
+		$utms = array();
+
+		// Fonte 1: campos hidden injetados pelo JS no form ($_POST['epd_utm']).
+		$post_utms = isset( $_POST['epd_utm'] ) && is_array( $_POST['epd_utm'] ) ? $_POST['epd_utm'] : array();
+
+		// Fonte 2: cookie (fallback se o JS não conseguiu injetar a tempo).
+		$cookie_utms = array();
+		if ( ! empty( $_COOKIE['epd_utm'] ) ) {
+			$decoded = json_decode( stripslashes( $_COOKIE['epd_utm'] ), true );
+			if ( is_array( $decoded ) ) {
+				$cookie_utms = $decoded;
+			}
+		}
+
+		foreach ( $keys as $key ) {
+			$value = '';
+
+			if ( ! empty( $post_utms[ $key ] ) ) {
+				$value = sanitize_text_field( $post_utms[ $key ] );
+			} elseif ( ! empty( $cookie_utms[ $key ] ) ) {
+				$value = sanitize_text_field( $cookie_utms[ $key ] );
+			}
+
+			if ( $value !== '' ) {
+				$utms[ $key ] = $value;
+			}
+		}
+
+		if ( ! empty( $utms ) ) {
+			$this->log( 'UTMs capturados: ' . wp_json_encode( $utms ) );
+		}
+
+		return $utms;
+	}
+
+	/**
+	 * Dispara um POST para a URL de webhook com os dados criados no Pipedrive + UTMs.
+	 */
+	private function fire_webhook( $url, array $created, array $utms = array() ) {
 		$payload = array(
 			'source'       => 'elementor-pipedrive',
 			'person'       => $created['person'],
 			'organization' => $created['organization'],
 			'deal'         => $created['deal'],
+			'utm'          => ! empty( $utms ) ? $utms : null,
 		);
 
 		$this->log( 'Disparando webhook: ' . $url );
