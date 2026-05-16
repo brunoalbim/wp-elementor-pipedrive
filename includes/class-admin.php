@@ -12,6 +12,7 @@ class EPD_Admin {
 		add_action( 'admin_post_epd_save_settings', array( $this, 'save_settings' ) );
 		add_action( 'admin_post_epd_save_mapping', array( $this, 'save_mapping' ) );
 		add_action( 'admin_post_epd_delete_mapping', array( $this, 'delete_mapping' ) );
+		add_action( 'admin_post_epd_clear_logs', array( $this, 'clear_logs' ) );
 
 		// AJAX handlers.
 		add_action( 'wp_ajax_epd_test_connection', array( $this, 'ajax_test_connection' ) );
@@ -53,6 +54,15 @@ class EPD_Admin {
 			'manage_options',
 			'epd-mappings',
 			array( $this, 'render_mappings_page' )
+		);
+
+		add_submenu_page(
+			'epd-settings',
+			__( 'Logs', 'elementor-pipedrive' ),
+			__( 'Logs', 'elementor-pipedrive' ),
+			'manage_options',
+			'epd-logs',
+			array( $this, 'render_logs_page' )
 		);
 	}
 
@@ -114,6 +124,10 @@ class EPD_Admin {
 		} else {
 			require_once EPD_PLUGIN_DIR . 'admin/partials/mapping-page.php';
 		}
+	}
+
+	public function render_logs_page() {
+		require_once EPD_PLUGIN_DIR . 'admin/partials/logs-page.php';
 	}
 
 	// -------------------------------------------------------------------------
@@ -207,6 +221,20 @@ class EPD_Admin {
 		}
 
 		wp_redirect( add_query_arg( array( 'page' => 'epd-mappings', 'deleted' => '1' ), admin_url( 'admin.php' ) ) );
+		exit;
+	}
+
+	public function clear_logs() {
+		check_admin_referer( 'epd_clear_logs' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( 'Sem permissão.' );
+		}
+
+		global $wpdb;
+		$wpdb->query( "TRUNCATE TABLE {$wpdb->prefix}epd_logs" );
+
+		wp_redirect( add_query_arg( array( 'page' => 'epd-logs', 'cleared' => '1' ), admin_url( 'admin.php' ) ) );
 		exit;
 	}
 
@@ -366,26 +394,47 @@ class EPD_Admin {
 				$element['widgetType'] === 'form' &&
 				isset( $element['settings'] )
 			) {
-				$settings = $element['settings'];
-				$form_id  = isset( $settings['id'] ) ? $settings['id'] : ( $element['id'] ?? '' );
-				$form_name = isset( $settings['form_name'] ) ? $settings['form_name'] : 'Formulário sem nome';
+				$settings  = $element['settings'];
+
+				// O Elementor Pro dispara o hook com o valor de get_form_settings('id'),
+				// que é settings['id'] quando preenchido, ou o _id do widget como fallback.
+				// Salvamos o mesmo valor para garantir o match na busca do mapeamento.
+				$form_id   = ( isset( $settings['id'] ) && $settings['id'] !== '' )
+					? $settings['id']
+					: ( isset( $element['id'] ) ? $element['id'] : '' );
+
+				$form_name = isset( $settings['form_name'] ) && $settings['form_name'] !== ''
+					? $settings['form_name']
+					: 'Formulário sem nome';
 
 				$fields = array();
 				if ( ! empty( $settings['form_fields'] ) ) {
 					foreach ( $settings['form_fields'] as $field ) {
+						// custom_id é o que aparece como 'id' no record do Elementor.
+						$field_id = '';
+						if ( ! empty( $field['custom_id'] ) ) {
+							$field_id = $field['custom_id'];
+						} elseif ( ! empty( $field['_id'] ) ) {
+							$field_id = $field['_id'];
+						}
+
 						$fields[] = array(
-							'id'    => $field['custom_id'] ?? ( $field['_id'] ?? '' ),
-							'label' => $field['field_label'] ?? ( $field['placeholder'] ?? 'Campo' ),
-							'type'  => $field['field_type'] ?? 'text',
+							'id'    => $field_id,
+							'label' => isset( $field['field_label'] ) && $field['field_label'] !== ''
+								? $field['field_label']
+								: ( isset( $field['placeholder'] ) ? $field['placeholder'] : 'Campo' ),
+							'type'  => isset( $field['field_type'] ) ? $field['field_type'] : 'text',
 						);
 					}
 				}
 
-				$forms[] = array(
-					'id'     => $form_id,
-					'name'   => $form_name,
-					'fields' => $fields,
-				);
+				if ( $form_id ) {
+					$forms[] = array(
+						'id'     => $form_id,
+						'name'   => $form_name,
+						'fields' => $fields,
+					);
+				}
 			}
 
 			if ( ! empty( $element['elements'] ) ) {

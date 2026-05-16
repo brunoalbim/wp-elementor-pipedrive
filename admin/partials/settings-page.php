@@ -16,6 +16,9 @@
 		<a href="<?php echo esc_url( admin_url( 'admin.php?page=epd-mappings' ) ); ?>" class="epd-tab">
 			<?php esc_html_e( 'Mapeamentos', 'elementor-pipedrive' ); ?>
 		</a>
+		<a href="<?php echo esc_url( admin_url( 'admin.php?page=epd-logs' ) ); ?>" class="epd-tab">
+			<?php esc_html_e( 'Logs', 'elementor-pipedrive' ); ?>
+		</a>
 	</div>
 
 	<div class="epd-card">

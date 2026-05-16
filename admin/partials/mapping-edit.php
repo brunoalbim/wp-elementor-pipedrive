@@ -27,6 +27,9 @@ if ( ! is_array( $saved_mappings ) ) {
 		<a href="<?php echo esc_url( admin_url( 'admin.php?page=epd-mappings' ) ); ?>" class="epd-tab active">
 			<?php esc_html_e( 'Mapeamentos', 'elementor-pipedrive' ); ?>
 		</a>
+		<a href="<?php echo esc_url( admin_url( 'admin.php?page=epd-logs' ) ); ?>" class="epd-tab">
+			<?php esc_html_e( 'Logs', 'elementor-pipedrive' ); ?>
+		</a>
 	</div>
 
 	<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="epd-mapping-form">

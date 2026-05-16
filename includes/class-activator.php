@@ -9,16 +9,15 @@ class EPD_Activator {
 	public static function activate() {
 		global $wpdb;
 
-		$table_name      = $wpdb->prefix . 'epd_mappings';
 		$charset_collate = $wpdb->get_charset_collate();
 
-		$sql = "CREATE TABLE IF NOT EXISTS {$table_name} (
+		$sql_mappings = "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}epd_mappings (
 			id          BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
 			form_id     VARCHAR(100)        NOT NULL,
 			form_name   VARCHAR(255)        NOT NULL DEFAULT '',
 			pipeline_id BIGINT(20)          NOT NULL,
 			stage_id    BIGINT(20)          NOT NULL,
-			deal_title  VARCHAR(255)        NOT NULL DEFAULT 'Lead: {nome}',
+			deal_title  VARCHAR(255)        NOT NULL DEFAULT 'Lead',
 			mappings    LONGTEXT            NOT NULL,
 			active      TINYINT(1)          NOT NULL DEFAULT 1,
 			created_at  DATETIME            NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -27,10 +26,18 @@ class EPD_Activator {
 			KEY form_id (form_id)
 		) {$charset_collate};";
 
-		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-		dbDelta( $sql );
+		$sql_logs = "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}epd_logs (
+			id         BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			message    TEXT                NOT NULL,
+			created_at DATETIME            NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (id)
+		) {$charset_collate};";
 
-		add_option( 'epd_version', EPD_VERSION );
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+		dbDelta( $sql_mappings );
+		dbDelta( $sql_logs );
+
+		update_option( 'epd_version', EPD_VERSION );
 	}
 
 	public static function deactivate() {

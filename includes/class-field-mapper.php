@@ -58,8 +58,12 @@ class EPD_Field_Mapper {
 	}
 
 	/**
-	 * Atribui o valor ao campo correto do payload, tratando campos especiais
-	 * como email e phone que o Pipedrive espera como arrays.
+	 * Atribui o valor ao campo correto do payload.
+	 *
+	 * Campos nativos do Pipedrive são enviados no nível raiz do objeto.
+	 * Campos customizados (chave hex de 40 chars) devem ficar dentro de
+	 * custom_fields conforme exigido pela API v2.
+	 * Campos especiais como email e phone são arrays estruturados.
 	 */
 	private function assign_field( array $entity_data, $field_key, $value ) {
 		if ( $field_key === 'email' ) {
@@ -70,11 +74,23 @@ class EPD_Field_Mapper {
 			$entity_data['phones'] = array(
 				array( 'value' => $value, 'primary' => true, 'label' => 'work' ),
 			);
+		} elseif ( $this->is_custom_field( $field_key ) ) {
+			if ( ! isset( $entity_data['custom_fields'] ) ) {
+				$entity_data['custom_fields'] = array();
+			}
+			$entity_data['custom_fields'][ $field_key ] = $value;
 		} else {
 			$entity_data[ $field_key ] = $value;
 		}
 
 		return $entity_data;
+	}
+
+	/**
+	 * Campos customizados do Pipedrive são hashes hexadecimais de 40 caracteres.
+	 */
+	private function is_custom_field( $key ) {
+		return (bool) preg_match( '/^[0-9a-f]{40}$/', $key );
 	}
 
 	/**

@@ -80,7 +80,8 @@ class EPD_Pipedrive_API {
 	// -------------------------------------------------------------------------
 
 	public function test_connection() {
-		return $this->get( '/users/me' );
+		// /users/me existe apenas na v1.
+		return $this->get( '/users/me', array(), 'v1' );
 	}
 
 	// -------------------------------------------------------------------------
