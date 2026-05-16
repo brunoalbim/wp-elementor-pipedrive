@@ -12,6 +12,7 @@ class EPD_Admin {
 		add_action( 'admin_post_epd_save_settings', array( $this, 'save_settings' ) );
 		add_action( 'admin_post_epd_save_mapping', array( $this, 'save_mapping' ) );
 		add_action( 'admin_post_epd_delete_mapping', array( $this, 'delete_mapping' ) );
+		add_action( 'admin_post_epd_duplicate_mapping', array( $this, 'duplicate_mapping' ) );
 		add_action( 'admin_post_epd_clear_logs', array( $this, 'clear_logs' ) );
 
 		// AJAX handlers.
@@ -255,6 +256,50 @@ class EPD_Admin {
 		}
 
 		wp_redirect( add_query_arg( array( 'page' => 'epd-mappings', 'deleted' => '1' ), admin_url( 'admin.php' ) ) );
+		exit;
+	}
+
+	public function duplicate_mapping() {
+		check_admin_referer( 'epd_duplicate_mapping' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( 'Sem permissão.' );
+		}
+
+		global $wpdb;
+		$table      = $wpdb->prefix . 'epd_mappings';
+		$mapping_id = (int) ( $_POST['mapping_id'] ?? 0 );
+
+		if ( ! $mapping_id ) {
+			wp_redirect( admin_url( 'admin.php?page=epd-mappings' ) );
+			exit;
+		}
+
+		$original = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $mapping_id ) );
+
+		if ( ! $original ) {
+			wp_redirect( admin_url( 'admin.php?page=epd-mappings' ) );
+			exit;
+		}
+
+		$wpdb->insert(
+			$table,
+			array(
+				'form_id'     => $original->form_id,
+				'form_name'   => $original->form_name . ' (Cópia)',
+				'pipeline_id' => $original->pipeline_id,
+				'stage_id'    => $original->stage_id,
+				'deal_title'  => $original->deal_title,
+				'mappings'    => $original->mappings,
+				'webhook_url' => $original->webhook_url,
+				'active'      => 0,
+			),
+			array( '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%d' )
+		);
+
+		$new_id = (int) $wpdb->insert_id;
+
+		wp_redirect( add_query_arg( array( 'page' => 'epd-mappings', 'action' => 'edit', 'id' => $new_id ), admin_url( 'admin.php' ) ) );
 		exit;
 	}
 

@@ -37,6 +37,11 @@ class EPD_Field_Mapper {
 
 			$value = sanitize_text_field( $submitted_fields[ $elementor_field ] );
 
+			// Ignora campos vazios — o Pipedrive rejeita string vazia em campos customizados.
+			if ( $value === '' ) {
+				continue;
+			}
+
 			if ( ! isset( $result[ $entity ] ) ) {
 				continue;
 			}

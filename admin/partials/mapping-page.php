@@ -61,17 +61,27 @@ $mappings = $this->get_all_mappings();
 							<?php endif; ?>
 						</td>
 						<td>
-							<a href="<?php echo esc_url( admin_url( 'admin.php?page=epd-mappings&action=edit&id=' . $mapping->id ) ); ?>" class="button button-small">
-								<?php esc_html_e( 'Editar', 'elementor-pipedrive' ); ?>
-							</a>
-							<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline;">
-								<input type="hidden" name="action" value="epd_delete_mapping">
-								<input type="hidden" name="mapping_id" value="<?php echo (int) $mapping->id; ?>">
-								<?php wp_nonce_field( 'epd_delete_mapping' ); ?>
-								<button type="submit" class="button button-small button-link-delete epd-delete-btn">
-									<?php esc_html_e( 'Excluir', 'elementor-pipedrive' ); ?>
-								</button>
-							</form>
+							<div style="display:flex; gap:6px; align-items:center; flex-wrap:nowrap;">
+								<a href="<?php echo esc_url( admin_url( 'admin.php?page=epd-mappings&action=edit&id=' . $mapping->id ) ); ?>" class="button button-small">
+									<?php esc_html_e( 'Editar', 'elementor-pipedrive' ); ?>
+								</a>
+								<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+									<input type="hidden" name="action" value="epd_duplicate_mapping">
+									<input type="hidden" name="mapping_id" value="<?php echo (int) $mapping->id; ?>">
+									<?php wp_nonce_field( 'epd_duplicate_mapping' ); ?>
+									<button type="submit" class="button button-small">
+										<?php esc_html_e( 'Duplicar', 'elementor-pipedrive' ); ?>
+									</button>
+								</form>
+								<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+									<input type="hidden" name="action" value="epd_delete_mapping">
+									<input type="hidden" name="mapping_id" value="<?php echo (int) $mapping->id; ?>">
+									<?php wp_nonce_field( 'epd_delete_mapping' ); ?>
+									<button type="submit" class="button button-small button-link-delete epd-delete-btn">
+										<?php esc_html_e( 'Excluir', 'elementor-pipedrive' ); ?>
+									</button>
+								</form>
+							</div>
 						</td>
 					</tr>
 					<?php endforeach; ?>
