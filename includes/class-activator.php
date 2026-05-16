@@ -12,16 +12,17 @@ class EPD_Activator {
 		$charset_collate = $wpdb->get_charset_collate();
 
 		$sql_mappings = "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}epd_mappings (
-			id          BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-			form_id     VARCHAR(100)        NOT NULL,
-			form_name   VARCHAR(255)        NOT NULL DEFAULT '',
-			pipeline_id BIGINT(20)          NOT NULL,
-			stage_id    BIGINT(20)          NOT NULL,
-			deal_title  VARCHAR(255)        NOT NULL DEFAULT 'Lead',
-			mappings    LONGTEXT            NOT NULL,
-			active      TINYINT(1)          NOT NULL DEFAULT 1,
-			created_at  DATETIME            NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			updated_at  DATETIME            NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			id           BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			form_id      VARCHAR(100)        NOT NULL,
+			form_name    VARCHAR(255)        NOT NULL DEFAULT '',
+			pipeline_id  BIGINT(20)          NOT NULL,
+			stage_id     BIGINT(20)          NOT NULL,
+			deal_title   VARCHAR(255)        NOT NULL DEFAULT 'Lead',
+			mappings     LONGTEXT            NOT NULL,
+			webhook_url  VARCHAR(2048)       NOT NULL DEFAULT '',
+			active       TINYINT(1)          NOT NULL DEFAULT 1,
+			created_at   DATETIME            NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at   DATETIME            NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 			PRIMARY KEY (id),
 			KEY form_id (form_id)
 		) {$charset_collate};";

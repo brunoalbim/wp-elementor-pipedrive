@@ -57,7 +57,11 @@ class EPD_Elementor_Handler {
 			)
 		);
 
-		$this->send_to_pipedrive( $data );
+		$result = $this->send_to_pipedrive( $data );
+
+		if ( ! empty( $mapping->webhook_url ) ) {
+			$this->fire_webhook( $mapping->webhook_url, $result );
+		}
 	}
 
 	/**
@@ -99,13 +103,20 @@ class EPD_Elementor_Handler {
 
 	/**
 	 * Executa a sequência: Organização → Pessoa → Negociação.
+	 * Retorna um array com os dados criados para uso no webhook.
 	 */
 	private function send_to_pipedrive( array $data ) {
 		$api = new EPD_Pipedrive_API();
 
+		$created = array(
+			'person'       => null,
+			'organization' => null,
+			'deal'         => null,
+		);
+
 		if ( ! $api->is_configured() ) {
 			$this->log( 'API não configurada. Verifique o token e o company domain nas configurações do plugin.' );
-			return;
+			return $created;
 		}
 
 		$org_id    = null;
@@ -117,7 +128,8 @@ class EPD_Elementor_Handler {
 			$result = $api->create_organization( $data['organization'] );
 
 			if ( $result['success'] ) {
-				$org_id = isset( $result['data']['data']['id'] ) ? $result['data']['data']['id'] : null;
+				$org_id              = isset( $result['data']['data']['id'] ) ? $result['data']['data']['id'] : null;
+				$created['organization'] = isset( $result['data']['data'] ) ? $result['data']['data'] : null;
 				$this->log( "Organização criada: #{$org_id}" );
 			} else {
 				$error = isset( $result['error'] ) ? $result['error'] : wp_json_encode( $result );
@@ -137,7 +149,8 @@ class EPD_Elementor_Handler {
 			$result = $api->create_person( $person_data );
 
 			if ( $result['success'] ) {
-				$person_id = isset( $result['data']['data']['id'] ) ? $result['data']['data']['id'] : null;
+				$person_id        = isset( $result['data']['data']['id'] ) ? $result['data']['data']['id'] : null;
+				$created['person'] = isset( $result['data']['data'] ) ? $result['data']['data'] : null;
 				$this->log( "Pessoa criada: #{$person_id}" );
 			} else {
 				$error = isset( $result['error'] ) ? $result['error'] : wp_json_encode( $result );
@@ -160,11 +173,42 @@ class EPD_Elementor_Handler {
 		$result = $api->create_deal( $deal_data );
 
 		if ( $result['success'] ) {
-			$deal_id = isset( $result['data']['data']['id'] ) ? $result['data']['data']['id'] : null;
+			$deal_id        = isset( $result['data']['data']['id'] ) ? $result['data']['data']['id'] : null;
+			$created['deal'] = isset( $result['data']['data'] ) ? $result['data']['data'] : null;
 			$this->log( "Negociação criada com sucesso: #{$deal_id}" );
 		} else {
 			$error = isset( $result['error'] ) ? $result['error'] : wp_json_encode( $result );
 			$this->log( 'Erro ao criar negociação: ' . $error );
+		}
+
+		return $created;
+	}
+
+	/**
+	 * Dispara um POST para a URL de webhook com os dados criados no Pipedrive.
+	 */
+	private function fire_webhook( $url, array $created ) {
+		$payload = array(
+			'source'       => 'elementor-pipedrive',
+			'person'       => $created['person'],
+			'organization' => $created['organization'],
+			'deal'         => $created['deal'],
+		);
+
+		$this->log( 'Disparando webhook: ' . $url );
+
+		$response = wp_remote_post( $url, array(
+			'headers'     => array( 'Content-Type' => 'application/json' ),
+			'body'        => wp_json_encode( $payload ),
+			'timeout'     => 15,
+			'redirection' => 3,
+		) );
+
+		if ( is_wp_error( $response ) ) {
+			$this->log( 'Erro no webhook: ' . $response->get_error_message() );
+		} else {
+			$code = wp_remote_retrieve_response_code( $response );
+			$this->log( "Webhook disparado. HTTP {$code}" );
 		}
 	}
 

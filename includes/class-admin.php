@@ -164,6 +164,7 @@ class EPD_Admin {
 		$pipeline_id = (int) ( $_POST['pipeline_id'] ?? 0 );
 		$stage_id    = (int) ( $_POST['stage_id'] ?? 0 );
 		$deal_title  = sanitize_text_field( $_POST['deal_title'] ?? 'Lead' );
+		$webhook_url = esc_url_raw( $_POST['webhook_url'] ?? '' );
 
 		// Monta array de mapeamentos a partir dos campos do form.
 		$elementor_fields = $_POST['elementor_field'] ?? array();
@@ -192,13 +193,31 @@ class EPD_Admin {
 			'stage_id'    => $stage_id,
 			'deal_title'  => $deal_title,
 			'mappings'    => wp_json_encode( $mappings ),
+			'webhook_url' => $webhook_url,
 			'active'      => 1,
 		);
 
 		if ( $mapping_id > 0 ) {
-			$wpdb->update( $table, $data, array( 'id' => $mapping_id ), array( '%s', '%s', '%d', '%d', '%s', '%s', '%d' ), array( '%d' ) );
+			$result = $wpdb->update(
+				$table,
+				$data,
+				array( 'id' => $mapping_id ),
+				array( '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%d' ),
+				array( '%d' )
+			);
 		} else {
-			$wpdb->insert( $table, $data, array( '%s', '%s', '%d', '%d', '%s', '%s', '%d' ) );
+			$result = $wpdb->insert(
+				$table,
+				$data,
+				array( '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%d' )
+			);
+		}
+
+		if ( $result === false ) {
+			wp_die(
+				'<strong>Erro ao salvar mapeamento:</strong> ' . esc_html( $wpdb->last_error )
+				. '<br><br><a href="' . esc_url( admin_url( 'admin.php?page=epd-mappings' ) ) . '">&larr; Voltar</a>'
+			);
 		}
 
 		wp_redirect( add_query_arg( array( 'page' => 'epd-mappings', 'saved' => '1' ), admin_url( 'admin.php' ) ) );

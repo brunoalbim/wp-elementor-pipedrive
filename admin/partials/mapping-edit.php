@@ -64,17 +64,19 @@ if ( ! is_array( $saved_mappings ) ) {
 				<tr>
 					<th><label for="epd-pipeline-select"><?php esc_html_e( 'Pipeline (Funil)', 'elementor-pipedrive' ); ?></label></th>
 					<td>
-						<select id="epd-pipeline-select" name="pipeline_id" class="regular-text" required>
+						<select id="epd-pipeline-select" class="regular-text">
 							<option value=""><?php esc_html_e( '— Carregando pipelines... —', 'elementor-pipedrive' ); ?></option>
 						</select>
+						<input type="hidden" name="pipeline_id" id="epd-pipeline-id" value="<?php echo esc_attr( $is_edit ? $mapping->pipeline_id : '' ); ?>">
 					</td>
 				</tr>
 				<tr>
 					<th><label for="epd-stage-select"><?php esc_html_e( 'Etapa (Stage)', 'elementor-pipedrive' ); ?></label></th>
 					<td>
-						<select id="epd-stage-select" name="stage_id" class="regular-text" required>
+						<select id="epd-stage-select" class="regular-text">
 							<option value=""><?php esc_html_e( '— Selecione o pipeline primeiro —', 'elementor-pipedrive' ); ?></option>
 						</select>
+						<input type="hidden" name="stage_id" id="epd-stage-id" value="<?php echo esc_attr( $is_edit ? $mapping->stage_id : '' ); ?>">
 					</td>
 				</tr>
 				<tr>
@@ -89,6 +91,30 @@ if ( ! is_array( $saved_mappings ) ) {
 						>
 						<p class="description">
 							<?php esc_html_e( 'Use {id_do_campo} para inserir valores dinâmicos. Ex: Lead: {nome}', 'elementor-pipedrive' ); ?>
+						</p>
+					</td>
+				</tr>
+			</table>
+		</div>
+
+		<!-- Webhook -->
+		<div class="epd-card">
+			<h2><?php esc_html_e( 'Webhook (opcional)', 'elementor-pipedrive' ); ?></h2>
+
+			<table class="form-table">
+				<tr>
+					<th><label for="epd-webhook-url"><?php esc_html_e( 'URL do Webhook', 'elementor-pipedrive' ); ?></label></th>
+					<td>
+						<input
+							type="url"
+							id="epd-webhook-url"
+							name="webhook_url"
+							value="<?php echo esc_attr( $is_edit ? $mapping->webhook_url : '' ); ?>"
+							class="large-text"
+							placeholder="https://..."
+						>
+						<p class="description">
+							<?php esc_html_e( 'Após criar Pessoa, Empresa e Negociação no Pipedrive, o plugin envia um POST com todos os dados para esta URL. Deixe em branco para desativar.', 'elementor-pipedrive' ); ?>
 						</p>
 					</td>
 				</tr>

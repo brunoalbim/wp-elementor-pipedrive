@@ -86,7 +86,9 @@
 			// Carrega pipelines e inicializa.
 			self.loadPipelines(function () {
 				if (epdEditData.pipelineId) {
-					$('#epd-pipeline-select').val(epdEditData.pipelineId).trigger('change');
+					$('#epd-pipeline-select').val(epdEditData.pipelineId);
+					$('#epd-pipeline-id').val(epdEditData.pipelineId);
+					$('#epd-pipeline-select').trigger('change');
 				}
 			});
 
@@ -102,12 +104,20 @@
 			// Eventos de pipeline selecionado.
 			$(document).on('change', '#epd-pipeline-select', function () {
 				var pipelineId = $(this).val();
+				$('#epd-pipeline-id').val(pipelineId);
+				$('#epd-stage-id').val(''); // limpa stage ao trocar pipeline
 				self.loadStages(pipelineId, function () {
 					if (epdEditData.stageId) {
 						$('#epd-stage-select').val(epdEditData.stageId);
+						$('#epd-stage-id').val(epdEditData.stageId);
 						epdEditData.stageId = null; // só aplica uma vez.
 					}
 				});
+			});
+
+			// Eventos de stage selecionado.
+			$(document).on('change', '#epd-stage-select', function () {
+				$('#epd-stage-id').val($(this).val());
 			});
 
 			// Adicionar nova linha de mapeamento.
