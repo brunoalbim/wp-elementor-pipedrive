@@ -1,0 +1,414 @@
+<?php
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+class EPD_Admin {
+
+	public function __construct() {
+		add_action( 'admin_menu', array( $this, 'register_menu' ) );
+		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+		add_action( 'admin_post_epd_save_settings', array( $this, 'save_settings' ) );
+		add_action( 'admin_post_epd_save_mapping', array( $this, 'save_mapping' ) );
+		add_action( 'admin_post_epd_delete_mapping', array( $this, 'delete_mapping' ) );
+
+		// AJAX handlers.
+		add_action( 'wp_ajax_epd_test_connection', array( $this, 'ajax_test_connection' ) );
+		add_action( 'wp_ajax_epd_get_pipelines', array( $this, 'ajax_get_pipelines' ) );
+		add_action( 'wp_ajax_epd_get_stages', array( $this, 'ajax_get_stages' ) );
+		add_action( 'wp_ajax_epd_get_pipedrive_fields', array( $this, 'ajax_get_pipedrive_fields' ) );
+		add_action( 'wp_ajax_epd_get_elementor_forms', array( $this, 'ajax_get_elementor_forms' ) );
+		add_action( 'wp_ajax_epd_get_form_fields', array( $this, 'ajax_get_form_fields' ) );
+	}
+
+	// -------------------------------------------------------------------------
+	// Menu & Assets
+	// -------------------------------------------------------------------------
+
+	public function register_menu() {
+		add_menu_page(
+			__( 'Elementor Pipedrive', 'elementor-pipedrive' ),
+			__( 'Elementor Pipedrive', 'elementor-pipedrive' ),
+			'manage_options',
+			'epd-settings',
+			array( $this, 'render_settings_page' ),
+			'dashicons-share-alt',
+			58
+		);
+
+		add_submenu_page(
+			'epd-settings',
+			__( 'Configurações', 'elementor-pipedrive' ),
+			__( 'Configurações', 'elementor-pipedrive' ),
+			'manage_options',
+			'epd-settings',
+			array( $this, 'render_settings_page' )
+		);
+
+		add_submenu_page(
+			'epd-settings',
+			__( 'Mapeamentos', 'elementor-pipedrive' ),
+			__( 'Mapeamentos', 'elementor-pipedrive' ),
+			'manage_options',
+			'epd-mappings',
+			array( $this, 'render_mappings_page' )
+		);
+	}
+
+	public function enqueue_assets( $hook ) {
+		$epd_hooks = array( 'toplevel_page_epd-settings', 'elementor-pipedrive_page_epd-mappings' );
+
+		if ( ! in_array( $hook, $epd_hooks, true ) && strpos( $hook, 'epd' ) === false ) {
+			return;
+		}
+
+		wp_enqueue_style(
+			'epd-admin',
+			EPD_PLUGIN_URL . 'admin/css/admin.css',
+			array(),
+			EPD_VERSION
+		);
+
+		wp_enqueue_script(
+			'epd-admin',
+			EPD_PLUGIN_URL . 'admin/js/admin.js',
+			array( 'jquery' ),
+			EPD_VERSION,
+			true
+		);
+
+		wp_localize_script(
+			'epd-admin',
+			'epdData',
+			array(
+				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
+				'nonce'   => wp_create_nonce( 'epd_ajax_nonce' ),
+				'i18n'    => array(
+					'confirmDelete'  => __( 'Tem certeza que deseja excluir este mapeamento?', 'elementor-pipedrive' ),
+					'connectionOk'   => __( 'Conexão bem-sucedida!', 'elementor-pipedrive' ),
+					'connectionFail' => __( 'Falha na conexão: ', 'elementor-pipedrive' ),
+					'loading'        => __( 'Carregando...', 'elementor-pipedrive' ),
+					'addRow'         => __( '+ Adicionar campo', 'elementor-pipedrive' ),
+					'remove'         => __( 'Remover', 'elementor-pipedrive' ),
+					'selectField'    => __( '— Selecione o campo —', 'elementor-pipedrive' ),
+					'selectEntity'   => __( '— Entidade —', 'elementor-pipedrive' ),
+				),
+			)
+		);
+	}
+
+	// -------------------------------------------------------------------------
+	// Render Pages
+	// -------------------------------------------------------------------------
+
+	public function render_settings_page() {
+		require_once EPD_PLUGIN_DIR . 'admin/partials/settings-page.php';
+	}
+
+	public function render_mappings_page() {
+		$action = isset( $_GET['action'] ) ? sanitize_key( $_GET['action'] ) : 'list';
+
+		if ( $action === 'edit' || $action === 'new' ) {
+			require_once EPD_PLUGIN_DIR . 'admin/partials/mapping-edit.php';
+		} else {
+			require_once EPD_PLUGIN_DIR . 'admin/partials/mapping-page.php';
+		}
+	}
+
+	// -------------------------------------------------------------------------
+	// Form Handlers
+	// -------------------------------------------------------------------------
+
+	public function save_settings() {
+		check_admin_referer( 'epd_save_settings' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( 'Sem permissão.' );
+		}
+
+		update_option( 'epd_api_token', sanitize_text_field( $_POST['epd_api_token'] ?? '' ) );
+		update_option( 'epd_company_domain', sanitize_text_field( $_POST['epd_company_domain'] ?? '' ) );
+
+		wp_redirect( add_query_arg( array( 'page' => 'epd-settings', 'saved' => '1' ), admin_url( 'admin.php' ) ) );
+		exit;
+	}
+
+	public function save_mapping() {
+		check_admin_referer( 'epd_save_mapping' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( 'Sem permissão.' );
+		}
+
+		global $wpdb;
+		$table = $wpdb->prefix . 'epd_mappings';
+
+		$mapping_id  = isset( $_POST['mapping_id'] ) ? (int) $_POST['mapping_id'] : 0;
+		$form_id     = sanitize_text_field( $_POST['form_id'] ?? '' );
+		$form_name   = sanitize_text_field( $_POST['form_name'] ?? '' );
+		$pipeline_id = (int) ( $_POST['pipeline_id'] ?? 0 );
+		$stage_id    = (int) ( $_POST['stage_id'] ?? 0 );
+		$deal_title  = sanitize_text_field( $_POST['deal_title'] ?? 'Lead' );
+
+		// Monta array de mapeamentos a partir dos campos do form.
+		$elementor_fields = $_POST['elementor_field'] ?? array();
+		$entities         = $_POST['entity'] ?? array();
+		$pipedrive_fields = $_POST['pipedrive_field'] ?? array();
+		$mappings         = array();
+
+		foreach ( $elementor_fields as $i => $ef ) {
+			$ef  = sanitize_text_field( $ef );
+			$ent = sanitize_key( $entities[ $i ] ?? '' );
+			$pf  = sanitize_text_field( $pipedrive_fields[ $i ] ?? '' );
+
+			if ( $ef && $ent && $pf ) {
+				$mappings[] = array(
+					'elementor_field' => $ef,
+					'entity'          => $ent,
+					'pipedrive_field' => $pf,
+				);
+			}
+		}
+
+		$data = array(
+			'form_id'     => $form_id,
+			'form_name'   => $form_name,
+			'pipeline_id' => $pipeline_id,
+			'stage_id'    => $stage_id,
+			'deal_title'  => $deal_title,
+			'mappings'    => wp_json_encode( $mappings ),
+			'active'      => 1,
+		);
+
+		if ( $mapping_id > 0 ) {
+			$wpdb->update( $table, $data, array( 'id' => $mapping_id ), array( '%s', '%s', '%d', '%d', '%s', '%s', '%d' ), array( '%d' ) );
+		} else {
+			$wpdb->insert( $table, $data, array( '%s', '%s', '%d', '%d', '%s', '%s', '%d' ) );
+		}
+
+		wp_redirect( add_query_arg( array( 'page' => 'epd-mappings', 'saved' => '1' ), admin_url( 'admin.php' ) ) );
+		exit;
+	}
+
+	public function delete_mapping() {
+		check_admin_referer( 'epd_delete_mapping' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( 'Sem permissão.' );
+		}
+
+		global $wpdb;
+		$table      = $wpdb->prefix . 'epd_mappings';
+		$mapping_id = (int) ( $_POST['mapping_id'] ?? 0 );
+
+		if ( $mapping_id > 0 ) {
+			$wpdb->delete( $table, array( 'id' => $mapping_id ), array( '%d' ) );
+		}
+
+		wp_redirect( add_query_arg( array( 'page' => 'epd-mappings', 'deleted' => '1' ), admin_url( 'admin.php' ) ) );
+		exit;
+	}
+
+	// -------------------------------------------------------------------------
+	// AJAX Handlers
+	// -------------------------------------------------------------------------
+
+	private function verify_ajax_nonce() {
+		if ( ! check_ajax_referer( 'epd_ajax_nonce', 'nonce', false ) ) {
+			wp_send_json_error( 'Nonce inválido.' );
+		}
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( 'Sem permissão.' );
+		}
+	}
+
+	public function ajax_test_connection() {
+		$this->verify_ajax_nonce();
+
+		$api    = new EPD_Pipedrive_API();
+		$result = $api->test_connection();
+
+		if ( $result['success'] ) {
+			$name = isset( $result['data']['data']['name'] ) ? $result['data']['data']['name'] : '';
+			wp_send_json_success( array( 'message' => "Conectado como: {$name}" ) );
+		} else {
+			wp_send_json_error( $result['error'] );
+		}
+	}
+
+	public function ajax_get_pipelines() {
+		$this->verify_ajax_nonce();
+
+		$api    = new EPD_Pipedrive_API();
+		$result = $api->get_pipelines();
+
+		if ( $result['success'] ) {
+			wp_send_json_success( $result['data'] );
+		} else {
+			wp_send_json_error( $result['error'] );
+		}
+	}
+
+	public function ajax_get_stages() {
+		$this->verify_ajax_nonce();
+
+		$pipeline_id = (int) ( $_POST['pipeline_id'] ?? 0 );
+
+		if ( ! $pipeline_id ) {
+			wp_send_json_error( 'pipeline_id inválido.' );
+		}
+
+		$api    = new EPD_Pipedrive_API();
+		$result = $api->get_stages( $pipeline_id );
+
+		if ( $result['success'] ) {
+			wp_send_json_success( $result['data'] );
+		} else {
+			wp_send_json_error( $result['error'] );
+		}
+	}
+
+	public function ajax_get_pipedrive_fields() {
+		$this->verify_ajax_nonce();
+
+		$entity = sanitize_key( $_POST['entity'] ?? '' );
+		$api    = new EPD_Pipedrive_API();
+
+		if ( $entity === 'person' ) {
+			$result = $api->get_person_fields();
+		} elseif ( $entity === 'organization' ) {
+			$result = $api->get_organization_fields();
+		} elseif ( $entity === 'deal' ) {
+			$result = $api->get_deal_fields();
+		} else {
+			wp_send_json_error( 'Entidade inválida.' );
+			return;
+		}
+
+		if ( $result['success'] ) {
+			wp_send_json_success( $result['data'] );
+		} else {
+			wp_send_json_error( $result['error'] );
+		}
+	}
+
+	public function ajax_get_elementor_forms() {
+		$this->verify_ajax_nonce();
+
+		$forms = $this->get_all_elementor_forms();
+		wp_send_json_success( $forms );
+	}
+
+	public function ajax_get_form_fields() {
+		$this->verify_ajax_nonce();
+
+		$form_id = sanitize_text_field( $_POST['form_id'] ?? '' );
+
+		if ( ! $form_id ) {
+			wp_send_json_error( 'form_id inválido.' );
+		}
+
+		$forms  = $this->get_all_elementor_forms();
+		$fields = array();
+
+		foreach ( $forms as $form ) {
+			if ( $form['id'] === $form_id ) {
+				$fields = $form['fields'];
+				break;
+			}
+		}
+
+		wp_send_json_success( $fields );
+	}
+
+	// -------------------------------------------------------------------------
+	// Helpers
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Retorna todos os formulários Elementor Pro encontrados nos posts/páginas.
+	 */
+	public function get_all_elementor_forms() {
+		$forms = array();
+
+		$posts = get_posts( array(
+			'post_type'      => array( 'page', 'post', 'elementor_library' ),
+			'posts_per_page' => -1,
+			'post_status'    => 'publish',
+			'meta_key'       => '_elementor_data',
+		) );
+
+		foreach ( $posts as $post ) {
+			$data = get_post_meta( $post->ID, '_elementor_data', true );
+
+			if ( empty( $data ) ) {
+				continue;
+			}
+
+			$elements = json_decode( $data, true );
+
+			if ( ! is_array( $elements ) ) {
+				continue;
+			}
+
+			$this->find_forms_in_elements( $elements, $forms );
+		}
+
+		return $forms;
+	}
+
+	private function find_forms_in_elements( array $elements, array &$forms ) {
+		foreach ( $elements as $element ) {
+			if (
+				isset( $element['widgetType'] ) &&
+				$element['widgetType'] === 'form' &&
+				isset( $element['settings'] )
+			) {
+				$settings = $element['settings'];
+				$form_id  = isset( $settings['id'] ) ? $settings['id'] : ( $element['id'] ?? '' );
+				$form_name = isset( $settings['form_name'] ) ? $settings['form_name'] : 'Formulário sem nome';
+
+				$fields = array();
+				if ( ! empty( $settings['form_fields'] ) ) {
+					foreach ( $settings['form_fields'] as $field ) {
+						$fields[] = array(
+							'id'    => $field['custom_id'] ?? ( $field['_id'] ?? '' ),
+							'label' => $field['field_label'] ?? ( $field['placeholder'] ?? 'Campo' ),
+							'type'  => $field['field_type'] ?? 'text',
+						);
+					}
+				}
+
+				$forms[] = array(
+					'id'     => $form_id,
+					'name'   => $form_name,
+					'fields' => $fields,
+				);
+			}
+
+			if ( ! empty( $element['elements'] ) ) {
+				$this->find_forms_in_elements( $element['elements'], $forms );
+			}
+		}
+	}
+
+	/**
+	 * Retorna todos os mapeamentos salvos no banco.
+	 */
+	public function get_all_mappings() {
+		global $wpdb;
+		$table = $wpdb->prefix . 'epd_mappings';
+		return $wpdb->get_results( "SELECT * FROM {$table} ORDER BY id DESC" );
+	}
+
+	/**
+	 * Retorna um mapeamento pelo ID.
+	 */
+	public function get_mapping( $id ) {
+		global $wpdb;
+		$table = $wpdb->prefix . 'epd_mappings';
+		return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", (int) $id ) );
+	}
+}
