@@ -21,6 +21,8 @@ class EPD_Admin {
 		add_action( 'wp_ajax_epd_get_pipedrive_fields', array( $this, 'ajax_get_pipedrive_fields' ) );
 		add_action( 'wp_ajax_epd_get_elementor_forms', array( $this, 'ajax_get_elementor_forms' ) );
 		add_action( 'wp_ajax_epd_get_form_fields', array( $this, 'ajax_get_form_fields' ) );
+		add_action( 'wp_ajax_epd_retry_pipedrive', array( $this, 'ajax_retry_pipedrive' ) );
+		add_action( 'wp_ajax_epd_retry_webhook', array( $this, 'ajax_retry_webhook' ) );
 	}
 
 	// -------------------------------------------------------------------------
@@ -54,6 +56,15 @@ class EPD_Admin {
 			'manage_options',
 			'epd-mappings',
 			array( $this, 'render_mappings_page' )
+		);
+
+		add_submenu_page(
+			'epd-settings',
+			__( 'Envios', 'elementor-pipedrive' ),
+			__( 'Envios', 'elementor-pipedrive' ),
+			'manage_options',
+			'epd-submissions',
+			array( $this, 'render_submissions_page' )
 		);
 
 		add_submenu_page(
@@ -124,6 +135,10 @@ class EPD_Admin {
 		} else {
 			require_once EPD_PLUGIN_DIR . 'admin/partials/mapping-page.php';
 		}
+	}
+
+	public function render_submissions_page() {
+		require_once EPD_PLUGIN_DIR . 'admin/partials/submissions-page.php';
 	}
 
 	public function render_logs_page() {
@@ -372,6 +387,44 @@ class EPD_Admin {
 
 	// -------------------------------------------------------------------------
 	// Helpers
+	public function ajax_retry_pipedrive() {
+		$this->verify_ajax_nonce();
+
+		$submission_id = (int) ( $_POST['submission_id'] ?? 0 );
+
+		if ( ! $submission_id ) {
+			wp_send_json_error( 'submission_id inválido.' );
+		}
+
+		$handler = new EPD_Elementor_Handler();
+		$result  = $handler->retry_pipedrive( $submission_id );
+
+		if ( $result['success'] ) {
+			wp_send_json_success( $result );
+		} else {
+			wp_send_json_error( $result['error'] );
+		}
+	}
+
+	public function ajax_retry_webhook() {
+		$this->verify_ajax_nonce();
+
+		$submission_id = (int) ( $_POST['submission_id'] ?? 0 );
+
+		if ( ! $submission_id ) {
+			wp_send_json_error( 'submission_id inválido.' );
+		}
+
+		$handler = new EPD_Elementor_Handler();
+		$result  = $handler->retry_webhook( $submission_id );
+
+		if ( $result['success'] ) {
+			wp_send_json_success( $result );
+		} else {
+			wp_send_json_error( isset( $result['error'] ) ? $result['error'] : 'Erro no webhook.' );
+		}
+	}
+
 	// -------------------------------------------------------------------------
 
 	/**
@@ -479,6 +532,17 @@ class EPD_Admin {
 			array( 'id' => 'epd_utm_campaign', 'label' => '📍 UTM Campaign', 'type' => 'utm' ),
 			array( 'id' => 'epd_utm_term',     'label' => '📍 UTM Term',     'type' => 'utm' ),
 			array( 'id' => 'epd_utm_content',  'label' => '📍 UTM Content',  'type' => 'utm' ),
+		);
+	}
+
+	/**
+	 * Retorna os últimos N submissions.
+	 */
+	public function get_submissions( $limit = 100 ) {
+		global $wpdb;
+		$table = $wpdb->prefix . 'epd_submissions';
+		return $wpdb->get_results(
+			$wpdb->prepare( "SELECT * FROM {$table} ORDER BY id DESC LIMIT %d", (int) $limit )
 		);
 	}
 

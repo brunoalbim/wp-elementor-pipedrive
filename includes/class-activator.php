@@ -34,9 +34,27 @@ class EPD_Activator {
 			PRIMARY KEY (id)
 		) {$charset_collate};";
 
+		$sql_submissions = "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}epd_submissions (
+			id               BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			form_id          VARCHAR(100)        NOT NULL,
+			form_name        VARCHAR(255)        NOT NULL DEFAULT '',
+			submitted_data   LONGTEXT            NOT NULL,
+			pipedrive_status VARCHAR(20)         NOT NULL DEFAULT 'pending',
+			pipedrive_result LONGTEXT            NOT NULL DEFAULT '',
+			webhook_status   VARCHAR(20)         NOT NULL DEFAULT 'skipped',
+			webhook_url      VARCHAR(2048)       NOT NULL DEFAULT '',
+			webhook_result   VARCHAR(20)         NOT NULL DEFAULT '',
+			created_at       DATETIME            NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at       DATETIME            NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY (id),
+			KEY form_id (form_id),
+			KEY pipedrive_status (pipedrive_status)
+		) {$charset_collate};";
+
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		dbDelta( $sql_mappings );
 		dbDelta( $sql_logs );
+		dbDelta( $sql_submissions );
 
 		update_option( 'epd_version', EPD_VERSION );
 	}

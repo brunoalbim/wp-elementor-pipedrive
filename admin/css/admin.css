@@ -135,6 +135,31 @@
 	color: #646970;
 }
 
+.epd-badge-pending {
+	background: #fff8e5;
+	color: #996800;
+}
+
+/* Submissions table */
+.epd-submissions-table .epd-details-row td {
+	border-top: none;
+}
+
+.epd-submission-row td {
+	vertical-align: middle;
+}
+
+.epd-retry-pipedrive,
+.epd-retry-webhook {
+	white-space: nowrap;
+}
+
+.epd-retry-pipedrive.is-loading,
+.epd-retry-webhook.is-loading {
+	opacity: 0.6;
+	pointer-events: none;
+}
+
 /* Connection result */
 #epd-connection-result {
 	font-weight: 500;

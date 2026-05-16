@@ -20,18 +20,6 @@ if ( ! is_array( $saved_mappings ) ) {
 		?>
 	</h1>
 
-	<div class="epd-tabs">
-		<a href="<?php echo esc_url( admin_url( 'admin.php?page=epd-settings' ) ); ?>" class="epd-tab">
-			<?php esc_html_e( 'Configurações', 'elementor-pipedrive' ); ?>
-		</a>
-		<a href="<?php echo esc_url( admin_url( 'admin.php?page=epd-mappings' ) ); ?>" class="epd-tab active">
-			<?php esc_html_e( 'Mapeamentos', 'elementor-pipedrive' ); ?>
-		</a>
-		<a href="<?php echo esc_url( admin_url( 'admin.php?page=epd-logs' ) ); ?>" class="epd-tab">
-			<?php esc_html_e( 'Logs', 'elementor-pipedrive' ); ?>
-		</a>
-	</div>
-
 	<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="epd-mapping-form">
 		<input type="hidden" name="action" value="epd_save_mapping">
 		<input type="hidden" name="mapping_id" value="<?php echo $mapping_id; ?>">

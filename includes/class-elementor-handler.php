@@ -10,19 +10,14 @@ class EPD_Elementor_Handler {
 		add_action( 'elementor_pro/forms/new_record', array( $this, 'handle_form_submit' ), 10, 2 );
 	}
 
-	/**
-	 * Disparado pelo Elementor Pro após o envio de um formulário.
-	 *
-	 * @param \ElementorPro\Modules\Forms\Classes\Form_Record  $record
-	 * @param \ElementorPro\Modules\Forms\Classes\Ajax_Handler $ajax_handler
-	 */
+	// -------------------------------------------------------------------------
+	// Entry point
+	// -------------------------------------------------------------------------
+
 	public function handle_form_submit( $record, $ajax_handler ) {
-		// O Elementor Pro expõe o ID do formulário via get_form_settings('id'),
-		// mas esse campo nem sempre está preenchido. Fallback para o ID do widget.
 		$form_id = $record->get_form_settings( 'id' );
 
 		if ( empty( $form_id ) ) {
-			// Tenta pegar via meta do post atual como último recurso.
 			$form_id = $record->get_form_settings( '_id' );
 		}
 
@@ -38,15 +33,14 @@ class EPD_Elementor_Handler {
 			return;
 		}
 
-		$raw_fields      = $record->get( 'fields' );
-		$submitted       = $this->normalize_fields( $raw_fields );
-		$saved_mappings  = json_decode( $mapping->mappings, true );
+		$raw_fields     = $record->get( 'fields' );
+		$submitted      = $this->normalize_fields( $raw_fields );
+		$saved_mappings = json_decode( $mapping->mappings, true );
 
 		if ( ! is_array( $saved_mappings ) ) {
 			return;
 		}
 
-		// Captura UTMs e injeta no $submitted como campos mapeáveis (epd_utm_*).
 		$utms = $this->extract_utms();
 		foreach ( $utms as $key => $value ) {
 			$submitted[ 'epd_' . $key ] = $value;
@@ -63,40 +57,44 @@ class EPD_Elementor_Handler {
 			)
 		);
 
-		$result = $this->send_to_pipedrive( $data );
+		// Persiste o submission com todos os dados necessários para retentativa.
+		$submission_id = $this->create_submission(
+			$form_id,
+			$mapping->form_name,
+			$submitted,
+			$utms,
+			$saved_mappings,
+			$mapping,
+			$mapping->webhook_url
+		);
+
+		$created = $this->send_to_pipedrive( $data );
+		$this->update_submission_pipedrive( $submission_id, $created );
 
 		if ( ! empty( $mapping->webhook_url ) ) {
-			$this->fire_webhook( $mapping->webhook_url, $result, $utms );
+			$webhook_result = $this->fire_webhook( $mapping->webhook_url, $created, $utms );
+			$this->update_submission_webhook( $submission_id, $webhook_result );
 		}
 	}
 
-	/**
-	 * Normaliza os campos do Elementor para ['custom_id' => 'value'].
-	 *
-	 * O Elementor indexa $raw_fields pela chave numérica interna do widget,
-	 * mas cada campo tem um 'id' (= custom_id definido pelo usuário) e um 'raw_value'.
-	 * Construímos um mapa pelo custom_id para que o mapeamento funcione corretamente.
-	 */
+	// -------------------------------------------------------------------------
+	// Normalize / helpers
+	// -------------------------------------------------------------------------
+
 	private function normalize_fields( array $raw_fields ) {
 		$normalized = array();
 
 		foreach ( $raw_fields as $key => $field ) {
-			// O Elementor Pro popula 'id' com o custom_id do campo.
 			$field_id = isset( $field['id'] ) && $field['id'] !== '' ? $field['id'] : $key;
 			$value    = isset( $field['value'] ) ? $field['value'] : ( isset( $field['raw_value'] ) ? $field['raw_value'] : '' );
-
 			$normalized[ $field_id ] = $value;
 		}
 
 		return $normalized;
 	}
 
-	/**
-	 * Busca o mapeamento ativo para o form_id no banco.
-	 */
 	private function get_mapping_for_form( $form_id ) {
 		global $wpdb;
-
 		$table = $wpdb->prefix . 'epd_mappings';
 
 		return $wpdb->get_row(
@@ -107,10 +105,215 @@ class EPD_Elementor_Handler {
 		);
 	}
 
-	/**
-	 * Executa a sequência: Organização → Pessoa → Negociação.
-	 * Retorna um array com os dados criados para uso no webhook.
-	 */
+	// -------------------------------------------------------------------------
+	// Submission persistence
+	// -------------------------------------------------------------------------
+
+	private function create_submission( $form_id, $form_name, $submitted, $utms, $saved_mappings, $mapping, $webhook_url ) {
+		global $wpdb;
+
+		$submitted_data = wp_json_encode( array(
+			'fields'  => $submitted,
+			'utms'    => $utms,
+			'mapping' => array(
+				'pipeline_id' => $mapping->pipeline_id,
+				'stage_id'    => $mapping->stage_id,
+				'deal_title'  => $mapping->deal_title,
+				'mappings'    => $saved_mappings,
+			),
+		) );
+
+		$wpdb->insert(
+			$wpdb->prefix . 'epd_submissions',
+			array(
+				'form_id'          => $form_id,
+				'form_name'        => $form_name,
+				'submitted_data'   => $submitted_data,
+				'pipedrive_status' => 'pending',
+				'pipedrive_result' => '',
+				'webhook_status'   => empty( $webhook_url ) ? 'skipped' : 'pending',
+				'webhook_url'      => $webhook_url,
+				'webhook_result'   => '',
+			),
+			array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s' )
+		);
+
+		return (int) $wpdb->insert_id;
+	}
+
+	private function update_submission_pipedrive( $submission_id, array $created ) {
+		if ( ! $submission_id ) {
+			return;
+		}
+
+		global $wpdb;
+
+		$deal    = $created['deal'];
+		$person  = $created['person'];
+		$org     = $created['organization'];
+		$has_deal = ! empty( $deal['id'] );
+
+		$result = array(
+			'deal_id'      => $has_deal ? $deal['id'] : null,
+			'person_id'    => ! empty( $person['id'] ) ? $person['id'] : null,
+			'org_id'       => ! empty( $org['id'] ) ? $org['id'] : null,
+			'deal'         => $deal ?: null,
+			'person'       => $person ?: null,
+			'organization' => $org ?: null,
+		);
+
+		if ( ! $has_deal ) {
+			$result['error'] = 'Negociação não criada';
+		}
+
+		$wpdb->update(
+			$wpdb->prefix . 'epd_submissions',
+			array(
+				'pipedrive_status' => $has_deal ? 'success' : 'error',
+				'pipedrive_result' => wp_json_encode( $result ),
+			),
+			array( 'id' => $submission_id ),
+			array( '%s', '%s' ),
+			array( '%d' )
+		);
+	}
+
+	private function update_submission_webhook( $submission_id, $result ) {
+		if ( ! $submission_id ) {
+			return;
+		}
+
+		global $wpdb;
+
+		$is_success = is_numeric( $result ) && (int) $result >= 200 && (int) $result < 300;
+
+		$wpdb->update(
+			$wpdb->prefix . 'epd_submissions',
+			array(
+				'webhook_status' => $is_success ? 'success' : 'error',
+				'webhook_result' => (string) $result,
+			),
+			array( 'id' => $submission_id ),
+			array( '%s', '%s' ),
+			array( '%d' )
+		);
+	}
+
+	// -------------------------------------------------------------------------
+	// Retry (chamados via AJAX pelo admin)
+	// -------------------------------------------------------------------------
+
+	public function retry_pipedrive( $submission_id ) {
+		global $wpdb;
+
+		$row = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT * FROM {$wpdb->prefix}epd_submissions WHERE id = %d",
+				(int) $submission_id
+			)
+		);
+
+		if ( ! $row ) {
+			return array( 'success' => false, 'error' => 'Submission não encontrada.' );
+		}
+
+		$stored = json_decode( $row->submitted_data, true );
+
+		if ( ! $stored ) {
+			return array( 'success' => false, 'error' => 'Dados do submission inválidos.' );
+		}
+
+		$mapper  = new EPD_Field_Mapper();
+		$data    = $mapper->map(
+			$stored['fields'],
+			$stored['mapping']['mappings'],
+			$stored['mapping']
+		);
+
+		// Marca como pending antes de tentar.
+		$wpdb->update(
+			$wpdb->prefix . 'epd_submissions',
+			array( 'pipedrive_status' => 'pending', 'pipedrive_result' => '' ),
+			array( 'id' => (int) $submission_id ),
+			array( '%s', '%s' ),
+			array( '%d' )
+		);
+
+		$created = $this->send_to_pipedrive( $data );
+		$this->update_submission_pipedrive( (int) $submission_id, $created );
+
+		$deal_id = ! empty( $created['deal']['id'] ) ? $created['deal']['id'] : null;
+
+		if ( ! $deal_id ) {
+			return array( 'success' => false, 'error' => 'Falha ao criar negociação.' );
+		}
+
+		// Se há webhook configurado, dispara automaticamente após Pipedrive OK.
+		if ( ! empty( $row->webhook_url ) ) {
+			$utms           = isset( $stored['utms'] ) ? $stored['utms'] : array();
+			$webhook_result = $this->fire_webhook( $row->webhook_url, $created, $utms );
+			$this->update_submission_webhook( (int) $submission_id, $webhook_result );
+
+			$webhook_ok = is_numeric( $webhook_result ) && (int) $webhook_result >= 200 && (int) $webhook_result < 300;
+
+			return array(
+				'success'        => true,
+				'deal_id'        => $deal_id,
+				'webhook_fired'  => true,
+				'webhook_ok'     => $webhook_ok,
+				'webhook_result' => $webhook_result,
+			);
+		}
+
+		return array( 'success' => true, 'deal_id' => $deal_id );
+	}
+
+	public function retry_webhook( $submission_id ) {
+		global $wpdb;
+
+		$row = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT * FROM {$wpdb->prefix}epd_submissions WHERE id = %d",
+				(int) $submission_id
+			)
+		);
+
+		if ( ! $row || empty( $row->webhook_url ) ) {
+			return array( 'success' => false, 'error' => 'Submission não encontrada ou sem webhook configurado.' );
+		}
+
+		$stored           = json_decode( $row->submitted_data, true );
+		$utms             = isset( $stored['utms'] ) ? $stored['utms'] : array();
+		$pipedrive_result = $row->pipedrive_result ? json_decode( $row->pipedrive_result, true ) : array();
+
+		// Reconstrói os objetos completos salvos no momento do envio original.
+		$pipedrive_created = array(
+			'deal'         => isset( $pipedrive_result['deal'] )         ? $pipedrive_result['deal']         : null,
+			'person'       => isset( $pipedrive_result['person'] )       ? $pipedrive_result['person']       : null,
+			'organization' => isset( $pipedrive_result['organization'] ) ? $pipedrive_result['organization'] : null,
+		);
+
+		// Marca como pending antes de tentar.
+		$wpdb->update(
+			$wpdb->prefix . 'epd_submissions',
+			array( 'webhook_status' => 'pending', 'webhook_result' => '' ),
+			array( 'id' => (int) $submission_id ),
+			array( '%s', '%s' ),
+			array( '%d' )
+		);
+
+		$result = $this->fire_webhook( $row->webhook_url, $pipedrive_created, $utms );
+		$this->update_submission_webhook( (int) $submission_id, $result );
+
+		$is_success = is_numeric( $result ) && (int) $result >= 200 && (int) $result < 300;
+
+		return array( 'success' => $is_success, 'http_code' => $result );
+	}
+
+	// -------------------------------------------------------------------------
+	// Pipedrive API
+	// -------------------------------------------------------------------------
+
 	private function send_to_pipedrive( array $data ) {
 		$api = new EPD_Pipedrive_API();
 
@@ -128,13 +331,12 @@ class EPD_Elementor_Handler {
 		$org_id    = null;
 		$person_id = null;
 
-		// Cria Organização se houver campos mapeados.
 		if ( ! empty( $data['organization'] ) ) {
 			$this->log( 'Enviando organização: ' . wp_json_encode( $data['organization'] ) );
 			$result = $api->create_organization( $data['organization'] );
 
 			if ( $result['success'] ) {
-				$org_id              = isset( $result['data']['data']['id'] ) ? $result['data']['data']['id'] : null;
+				$org_id                  = isset( $result['data']['data']['id'] ) ? $result['data']['data']['id'] : null;
 				$created['organization'] = isset( $result['data']['data'] ) ? $result['data']['data'] : null;
 				$this->log( "Organização criada: #{$org_id}" );
 			} else {
@@ -143,7 +345,6 @@ class EPD_Elementor_Handler {
 			}
 		}
 
-		// Cria Pessoa se houver campos mapeados.
 		if ( ! empty( $data['person'] ) ) {
 			$person_data = $data['person'];
 
@@ -164,7 +365,6 @@ class EPD_Elementor_Handler {
 			}
 		}
 
-		// Sempre cria Negociação.
 		$deal_data = $data['deal'];
 
 		if ( $person_id ) {
@@ -179,7 +379,7 @@ class EPD_Elementor_Handler {
 		$result = $api->create_deal( $deal_data );
 
 		if ( $result['success'] ) {
-			$deal_id        = isset( $result['data']['data']['id'] ) ? $result['data']['data']['id'] : null;
+			$deal_id         = isset( $result['data']['data']['id'] ) ? $result['data']['data']['id'] : null;
 			$created['deal'] = isset( $result['data']['data'] ) ? $result['data']['data'] : null;
 			$this->log( "Negociação criada com sucesso: #{$deal_id}" );
 		} else {
@@ -190,21 +390,16 @@ class EPD_Elementor_Handler {
 		return $created;
 	}
 
-	/**
-	 * Lê os UTMs do POST (injetados pelo epd-utm.js como hidden fields)
-	 * com fallback para o cookie persistido pelo JS no navegador.
-	 *
-	 * @return array ['utm_source' => '...', ...]  Apenas os UTMs presentes.
-	 */
+	// -------------------------------------------------------------------------
+	// UTMs
+	// -------------------------------------------------------------------------
+
 	private function extract_utms() {
-		$keys = array( 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content' );
-		$utms = array();
-
-		// Fonte 1: campos hidden injetados pelo JS no form ($_POST['epd_utm']).
-		$post_utms = isset( $_POST['epd_utm'] ) && is_array( $_POST['epd_utm'] ) ? $_POST['epd_utm'] : array();
-
-		// Fonte 2: cookie (fallback se o JS não conseguiu injetar a tempo).
+		$keys        = array( 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content' );
+		$utms        = array();
+		$post_utms   = isset( $_POST['epd_utm'] ) && is_array( $_POST['epd_utm'] ) ? $_POST['epd_utm'] : array();
 		$cookie_utms = array();
+
 		if ( ! empty( $_COOKIE['epd_utm'] ) ) {
 			$decoded = json_decode( stripslashes( $_COOKIE['epd_utm'] ), true );
 			if ( is_array( $decoded ) ) {
@@ -233,8 +428,12 @@ class EPD_Elementor_Handler {
 		return $utms;
 	}
 
+	// -------------------------------------------------------------------------
+	// Webhook
+	// -------------------------------------------------------------------------
+
 	/**
-	 * Dispara um POST para a URL de webhook com os dados criados no Pipedrive + UTMs.
+	 * Dispara o webhook e retorna o HTTP status code (string) ou mensagem de erro.
 	 */
 	private function fire_webhook( $url, array $created, array $utms = array() ) {
 		$payload = array(
@@ -255,24 +454,28 @@ class EPD_Elementor_Handler {
 		) );
 
 		if ( is_wp_error( $response ) ) {
-			$this->log( 'Erro no webhook: ' . $response->get_error_message() );
-		} else {
-			$code = wp_remote_retrieve_response_code( $response );
-			$this->log( "Webhook disparado. HTTP {$code}" );
+			$error = $response->get_error_message();
+			$this->log( 'Erro no webhook: ' . $error );
+			return $error;
 		}
+
+		$code = wp_remote_retrieve_response_code( $response );
+		$this->log( "Webhook disparado. HTTP {$code}" );
+
+		return (string) $code;
 	}
 
-	/**
-	 * Grava log sempre (não depende de WP_DEBUG) no error_log do servidor
-	 * e opcionalmente na tabela de logs do plugin.
-	 */
+	// -------------------------------------------------------------------------
+	// Log
+	// -------------------------------------------------------------------------
+
 	private function log( $message ) {
 		$entry = '[EPD ' . gmdate( 'Y-m-d H:i:s' ) . '] ' . $message;
 		error_log( $entry );
 
 		global $wpdb;
 		$table = $wpdb->prefix . 'epd_logs';
-		// Insere apenas se a tabela existir (criada pela versão 1.1+ do ativador).
+
 		if ( $wpdb->get_var( "SHOW TABLES LIKE '{$table}'" ) === $table ) {
 			$wpdb->insert(
 				$table,

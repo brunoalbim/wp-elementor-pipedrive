@@ -13,6 +13,7 @@
 		init: function () {
 			this.bindSettingsPage();
 			this.bindMappingPage();
+			this.bindSubmissionsPage();
 
 			if (typeof epdEditData !== 'undefined') {
 				this.initEditPage();
@@ -57,6 +58,84 @@
 				if (!confirm(epdData.i18n.confirmDelete)) {
 					e.preventDefault();
 				}
+			});
+		},
+
+		// -------------------------------------------------------------------------
+		// Submissions page
+		// -------------------------------------------------------------------------
+
+		bindSubmissionsPage: function () {
+			var self = this;
+
+			// Toggle linha de detalhes.
+			$(document).on('click', '.epd-toggle-details', function () {
+				var id = $(this).data('id');
+				$('#epd-details-' + id).toggle();
+			});
+
+			// Retentar Pipedrive.
+			$(document).on('click', '.epd-retry-pipedrive', function () {
+				var $btn = $(this);
+				var id   = $btn.data('id');
+				var $row = $btn.closest('tr');
+
+				$btn.addClass('is-loading').text('Enviando...');
+
+				$.post(epdData.ajaxUrl, {
+					action: 'epd_retry_pipedrive',
+					nonce: epdData.nonce,
+					submission_id: id,
+				}, function (response) {
+					if (response.success) {
+						var dealId = response.data.deal_id ? ' Deal #' + response.data.deal_id : '';
+						$row.find('.epd-pd-cell').html('<span class="epd-badge epd-badge-active">✓ Enviado' + self.esc(dealId) + '</span>');
+
+						if (response.data.webhook_fired) {
+							var whHtml = response.data.webhook_ok
+								? '<span class="epd-badge epd-badge-active">✓ HTTP ' + self.esc(String(response.data.webhook_result)) + '</span>'
+								: '<span class="epd-badge epd-badge-inactive">✗ Erro</span>';
+							$row.find('.epd-wh-cell').html(whHtml);
+						}
+
+						$btn.remove();
+					} else {
+						$row.find('.epd-pd-cell').html('<span class="epd-badge epd-badge-inactive">✗ Erro</span>');
+						$btn.removeClass('is-loading').text('↺ Retentar Pipedrive');
+						alert('Erro: ' + response.data);
+					}
+				}).fail(function () {
+					$btn.removeClass('is-loading').text('↺ Retentar Pipedrive');
+					alert('Erro de conexão.');
+				});
+			});
+
+			// Retentar Webhook.
+			$(document).on('click', '.epd-retry-webhook', function () {
+				var $btn = $(this);
+				var id   = $btn.data('id');
+				var $row = $btn.closest('tr');
+
+				$btn.addClass('is-loading').text('Enviando...');
+
+				$.post(epdData.ajaxUrl, {
+					action: 'epd_retry_webhook',
+					nonce: epdData.nonce,
+					submission_id: id,
+				}, function (response) {
+					if (response.success) {
+						var code = response.data.http_code || '200';
+						$row.find('.epd-wh-cell').html('<span class="epd-badge epd-badge-active">✓ HTTP ' + self.esc(String(code)) + '</span>');
+						$btn.remove();
+					} else {
+						$row.find('.epd-wh-cell').html('<span class="epd-badge epd-badge-inactive">✗ Erro</span>');
+						$btn.removeClass('is-loading').text('↺ Retentar Webhook');
+						alert('Erro: ' + response.data);
+					}
+				}).fail(function () {
+					$btn.removeClass('is-loading').text('↺ Retentar Webhook');
+					alert('Erro de conexão.');
+				});
 			});
 		},
 

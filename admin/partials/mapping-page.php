@@ -20,18 +20,6 @@ $mappings = $this->get_all_mappings();
 		</div>
 	<?php endif; ?>
 
-	<div class="epd-tabs">
-		<a href="<?php echo esc_url( admin_url( 'admin.php?page=epd-settings' ) ); ?>" class="epd-tab">
-			<?php esc_html_e( 'Configurações', 'elementor-pipedrive' ); ?>
-		</a>
-		<a href="<?php echo esc_url( admin_url( 'admin.php?page=epd-mappings' ) ); ?>" class="epd-tab active">
-			<?php esc_html_e( 'Mapeamentos', 'elementor-pipedrive' ); ?>
-		</a>
-		<a href="<?php echo esc_url( admin_url( 'admin.php?page=epd-logs' ) ); ?>" class="epd-tab">
-			<?php esc_html_e( 'Logs', 'elementor-pipedrive' ); ?>
-		</a>
-	</div>
-
 	<div class="epd-card">
 		<div class="epd-card-header">
 			<h2><?php esc_html_e( 'Mapeamentos de Formulários', 'elementor-pipedrive' ); ?></h2>
