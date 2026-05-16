@@ -32,33 +32,7 @@ register_deactivation_hook( __FILE__, array( 'EPD_Activator', 'deactivate' ) );
 function epd_init() {
 	load_plugin_textdomain( 'elementor-pipedrive', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
 
-	epd_maybe_upgrade_schema();
-
 	new EPD_Admin();
 	new EPD_Elementor_Handler();
 }
 add_action( 'plugins_loaded', 'epd_init' );
-
-/**
- * Aplica alterações de schema sem exigir desativar/reativar o plugin.
- * dbDelta não adiciona colunas em tabelas existentes, então fazemos
- * ALTER TABLE explícito verificando se a coluna já existe.
- */
-function epd_maybe_upgrade_schema() {
-	if ( get_option( 'epd_version' ) === EPD_VERSION ) {
-		return;
-	}
-
-	global $wpdb;
-	$table = $wpdb->prefix . 'epd_mappings';
-
-	// Adiciona webhook_url se não existir (introduzida na v1.1.0).
-	$col = $wpdb->get_results( "SHOW COLUMNS FROM `{$table}` LIKE 'webhook_url'" );
-	if ( empty( $col ) ) {
-		$wpdb->query( "ALTER TABLE `{$table}` ADD COLUMN `webhook_url` VARCHAR(2048) NOT NULL DEFAULT ''" );
-	}
-
-	// Garante que as tabelas base existam (nova instalação ou tabela de logs).
-	require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-	EPD_Activator::activate();
-}
