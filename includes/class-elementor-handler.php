@@ -73,7 +73,7 @@ class EPD_Elementor_Handler {
 		$this->update_submission_pipedrive( $submission_id, $created );
 
 		if ( ! empty( $mapping->webhook_url ) ) {
-			$webhook_result = $this->fire_webhook( $mapping->webhook_url, $created, $utms );
+			$webhook_result = $this->fire_webhook( $mapping->webhook_url, $created, $submitted, $utms );
 			$this->update_submission_webhook( $submission_id, $webhook_result );
 		}
 	}
@@ -252,7 +252,8 @@ class EPD_Elementor_Handler {
 		// Se há webhook configurado, dispara automaticamente após Pipedrive OK.
 		if ( ! empty( $row->webhook_url ) ) {
 			$utms           = isset( $stored['utms'] ) ? $stored['utms'] : array();
-			$webhook_result = $this->fire_webhook( $row->webhook_url, $created, $utms );
+			$form_fields    = isset( $stored['fields'] ) ? $stored['fields'] : array();
+			$webhook_result = $this->fire_webhook( $row->webhook_url, $created, $form_fields, $utms );
 			$this->update_submission_webhook( (int) $submission_id, $webhook_result );
 
 			$webhook_ok = is_numeric( $webhook_result ) && (int) $webhook_result >= 200 && (int) $webhook_result < 300;
@@ -303,7 +304,8 @@ class EPD_Elementor_Handler {
 			array( '%d' )
 		);
 
-		$result = $this->fire_webhook( $row->webhook_url, $pipedrive_created, $utms );
+		$form_fields = isset( $stored['fields'] ) ? $stored['fields'] : array();
+		$result = $this->fire_webhook( $row->webhook_url, $pipedrive_created, $form_fields, $utms );
 		$this->update_submission_webhook( (int) $submission_id, $result );
 
 		$is_success = is_numeric( $result ) && (int) $result >= 200 && (int) $result < 300;
@@ -436,13 +438,28 @@ class EPD_Elementor_Handler {
 	/**
 	 * Dispara o webhook e retorna o HTTP status code (string) ou mensagem de erro.
 	 */
-	private function fire_webhook( $url, array $created, array $utms = array() ) {
+	private function fire_webhook( $url, array $created, array $form_fields = array(), array $utms = array() ) {
+		// Remove campos internos de UTM dos campos do formulário antes de enviar.
+		$clean_fields = array();
+		foreach ( $form_fields as $key => $value ) {
+			if ( strpos( $key, 'epd_utm' ) !== 0 ) {
+				$clean_fields[ $key ] = $value;
+			}
+		}
+
+		$form_data = $clean_fields;
+		if ( ! empty( $utms ) ) {
+			$form_data['utm'] = $utms;
+		}
+
 		$payload = array(
-			'source'       => 'elementor-pipedrive',
-			'person'       => $created['person'],
-			'organization' => $created['organization'],
-			'deal'         => $created['deal'],
-			'utm'          => ! empty( $utms ) ? $utms : null,
+			'source'    => 'elementor-pipedrive',
+			'form'      => $form_data,
+			'pipedrive' => array(
+				'person'       => $created['person'],
+				'organization' => $created['organization'],
+				'deal'         => $created['deal'],
+			),
 		);
 
 		$this->log( 'Disparando webhook: ' . $url );
