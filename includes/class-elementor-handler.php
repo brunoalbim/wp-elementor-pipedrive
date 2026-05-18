@@ -8,6 +8,7 @@ class EPD_Elementor_Handler {
 
 	public function __construct() {
 		add_action( 'elementor_pro/forms/new_record', array( $this, 'handle_form_submit' ), 10, 2 );
+		add_action( 'elementor_pro/forms/validation', array( $this, 'validate_form' ), 10, 2 );
 	}
 
 	// -------------------------------------------------------------------------
@@ -463,6 +464,100 @@ class EPD_Elementor_Handler {
 		$this->log( "Webhook disparado. HTTP {$code}" );
 
 		return (string) $code;
+	}
+
+	// -------------------------------------------------------------------------
+	// Validação de formulário (backend)
+	// -------------------------------------------------------------------------
+
+	public function validate_form( $record, $ajax_handler ) {
+		$form_id = $record->get_form_settings( 'id' );
+		if ( empty( $form_id ) ) {
+			$form_id = $record->get_form_settings( '_id' );
+		}
+		if ( empty( $form_id ) ) {
+			return;
+		}
+
+		$mapping = $this->get_mapping_for_form( $form_id );
+		if ( ! $mapping || empty( $mapping->validation_config ) ) {
+			return;
+		}
+
+		$config = json_decode( $mapping->validation_config, true );
+		if ( ! is_array( $config ) ) {
+			return;
+		}
+
+		$raw_fields = $record->get( 'fields' );
+
+		// Validação de telefone.
+		if ( ! empty( $config['phone_validation'] ) ) {
+			foreach ( array( 'telefone', 'celular' ) as $phone_id ) {
+				foreach ( $raw_fields as $field ) {
+					$field_custom_id = isset( $field['id'] ) ? $field['id'] : '';
+					if ( $field_custom_id !== $phone_id ) {
+						continue;
+					}
+					$value  = isset( $field['value'] ) ? $field['value'] : '';
+					$digits = preg_replace( '/\D/', '', $value );
+					if ( $value !== '' && strlen( $digits ) < 10 ) {
+						$ajax_handler->add_error(
+							$field['id'],
+							__( 'Telefone incompleto. Informe DDD + número (mínimo 10 dígitos).', 'elementor-pipedrive' )
+						);
+					}
+				}
+			}
+		}
+
+		// Validação de e-mail corporativo.
+		if ( ! empty( $config['email_block_enabled'] ) ) {
+			$blocked_domains  = isset( $config['email_block_domains'] )  ? (array) $config['email_block_domains']  : array();
+			$blocked_suffixes = isset( $config['email_block_suffixes'] ) ? (array) $config['email_block_suffixes'] : array();
+			$blocked_words    = isset( $config['email_block_words'] )    ? (array) $config['email_block_words']    : array();
+			$msg_domains      = ! empty( $config['email_msg_domains'] )  ? $config['email_msg_domains']  : __( 'E-mails de domínio público não são permitidos. Por favor, use um e-mail corporativo.', 'elementor-pipedrive' );
+			$msg_suffixes     = ! empty( $config['email_msg_suffixes'] ) ? $config['email_msg_suffixes'] : __( 'O domínio do seu e-mail não é permitido. Por favor, use um e-mail corporativo.', 'elementor-pipedrive' );
+			$msg_words        = ! empty( $config['email_msg_words'] )    ? $config['email_msg_words']    : __( 'O endereço de e-mail informado não é válido. Por favor, use um e-mail corporativo.', 'elementor-pipedrive' );
+
+			foreach ( $raw_fields as $field ) {
+				$field_custom_id = isset( $field['id'] ) ? $field['id'] : '';
+				if ( $field_custom_id !== 'email' ) {
+					continue;
+				}
+				$value = isset( $field['value'] ) ? trim( $field['value'] ) : '';
+				if ( ! $value || strpos( $value, '@' ) === false ) {
+					continue;
+				}
+
+				$domain      = strtolower( explode( '@', $value )[1] );
+				$error_msg   = null;
+
+				// Hierarquia: domínios > sufixos > palavras.
+				if ( in_array( $domain, $blocked_domains, true ) ) {
+					$error_msg = $msg_domains;
+				} else {
+					foreach ( $blocked_suffixes as $suffix ) {
+						if ( $suffix && substr( $domain, -strlen( $suffix ) ) === strtolower( $suffix ) ) {
+							$error_msg = $msg_suffixes;
+							break;
+						}
+					}
+				}
+				if ( ! $error_msg ) {
+					foreach ( $blocked_words as $word ) {
+						if ( $word && stripos( $domain, $word ) !== false ) {
+							$error_msg = $msg_words;
+							break;
+						}
+					}
+				}
+
+				if ( $error_msg ) {
+					$ajax_handler->add_error( $field['id'], $error_msg );
+				}
+			}
+		}
 	}
 
 	// -------------------------------------------------------------------------

@@ -10,6 +10,21 @@ $saved_mappings = $is_edit ? json_decode( $mapping->mappings, true ) : array();
 if ( ! is_array( $saved_mappings ) ) {
 	$saved_mappings = array();
 }
+
+$val_defaults = array(
+	'phone_validation'        => false,
+	'email_block_enabled'     => false,
+	'email_block_domains'     => array( 'gmail.com', 'hotmail.com', 'yahoo.com', 'outlook.com', 'live.com', 'icloud.com', 'uol.com.br', 'terra.com.br', 'bol.com.br', 'ig.com.br' ),
+	'email_block_suffixes'    => array( '.ru', '.online', '.xyz' ),
+	'email_block_words'       => array( 'teste', 'malware', 'phish' ),
+	'email_msg_domains'       => 'E-mails de domínio público não são permitidos. Por favor, use um e-mail corporativo.',
+	'email_msg_suffixes'      => 'O domínio do seu e-mail não é permitido. Por favor, use um e-mail corporativo.',
+	'email_msg_words'         => 'O endereço de e-mail informado não é válido. Por favor, use um e-mail corporativo.',
+);
+
+$val = $is_edit && ! empty( $mapping->validation_config )
+	? array_merge( $val_defaults, json_decode( $mapping->validation_config, true ) ?: array() )
+	: $val_defaults;
 ?>
 
 <div class="wrap epd-wrap">
@@ -107,6 +122,73 @@ if ( ! is_array( $saved_mappings ) ) {
 					</td>
 				</tr>
 			</table>
+		</div>
+
+		<!-- Validações -->
+		<div class="epd-card">
+			<h2><?php esc_html_e( 'Validações', 'elementor-pipedrive' ); ?></h2>
+
+			<table class="form-table">
+				<tr>
+					<th><?php esc_html_e( 'Telefone', 'elementor-pipedrive' ); ?></th>
+					<td>
+						<label>
+							<input type="checkbox" name="phone_validation" value="1" <?php checked( $val['phone_validation'] ); ?>>
+							<?php esc_html_e( 'Formatar e validar campos de telefone', 'elementor-pipedrive' ); ?>
+						</label>
+						<p class="description">
+							<?php esc_html_e( 'Aplica máscara (99) 99999-9999 e bloqueia envio se incompleto. Para funcionar, o campo no Elementor deve ter o ID customizado "telefone" ou "celular".', 'elementor-pipedrive' ); ?>
+						</p>
+					</td>
+				</tr>
+				<tr>
+					<th><?php esc_html_e( 'E-mail corporativo', 'elementor-pipedrive' ); ?></th>
+					<td>
+						<label>
+							<input type="checkbox" name="email_block_enabled" value="1" id="epd-email-block-toggle" <?php checked( $val['email_block_enabled'] ); ?>>
+							<?php esc_html_e( 'Bloquear e-mails de domínios não-corporativos', 'elementor-pipedrive' ); ?>
+						</label>
+						<p class="description">
+							<?php esc_html_e( 'O campo de e-mail no Elementor deve ter o ID customizado "email".', 'elementor-pipedrive' ); ?>
+						</p>
+					</td>
+				</tr>
+			</table>
+
+			<div id="epd-email-block-fields" style="<?php echo $val['email_block_enabled'] ? '' : 'display:none;'; ?> margin-top:10px; padding-left:20px; border-left:3px solid #f0f0f1;">
+				<table class="form-table" style="margin-top:0;">
+					<tr>
+						<th style="width:220px;"><label for="epd-email-block-domains"><?php esc_html_e( 'Domínios bloqueados', 'elementor-pipedrive' ); ?></label></th>
+						<td>
+							<textarea id="epd-email-block-domains" name="email_block_domains" rows="6" class="regular-text" style="font-family:monospace;"><?php echo esc_textarea( implode( "\n", $val['email_block_domains'] ) ); ?></textarea>
+							<p class="description"><?php esc_html_e( 'Um domínio por linha. Ex: gmail.com', 'elementor-pipedrive' ); ?></p>
+							<input type="text" name="email_msg_domains" value="<?php echo esc_attr( $val['email_msg_domains'] ); ?>" class="large-text" style="margin-top:6px;" placeholder="<?php esc_attr_e( 'Mensagem de erro para domínio bloqueado', 'elementor-pipedrive' ); ?>">
+						</td>
+					</tr>
+					<tr>
+						<th><label for="epd-email-block-suffixes"><?php esc_html_e( 'Sufixos bloqueados', 'elementor-pipedrive' ); ?></label></th>
+						<td>
+							<textarea id="epd-email-block-suffixes" name="email_block_suffixes" rows="4" class="regular-text" style="font-family:monospace;"><?php echo esc_textarea( implode( "\n", $val['email_block_suffixes'] ) ); ?></textarea>
+							<p class="description"><?php esc_html_e( 'Um sufixo por linha. Ex: .ru', 'elementor-pipedrive' ); ?></p>
+							<input type="text" name="email_msg_suffixes" value="<?php echo esc_attr( $val['email_msg_suffixes'] ); ?>" class="large-text" style="margin-top:6px;" placeholder="<?php esc_attr_e( 'Mensagem de erro para sufixo bloqueado', 'elementor-pipedrive' ); ?>">
+						</td>
+					</tr>
+					<tr>
+						<th><label for="epd-email-block-words"><?php esc_html_e( 'Palavras bloqueadas no domínio', 'elementor-pipedrive' ); ?></label></th>
+						<td>
+							<textarea id="epd-email-block-words" name="email_block_words" rows="4" class="regular-text" style="font-family:monospace;"><?php echo esc_textarea( implode( "\n", $val['email_block_words'] ) ); ?></textarea>
+							<p class="description"><?php esc_html_e( 'Uma palavra por linha. Bloqueia domínios que contenham este texto. Ex: teste', 'elementor-pipedrive' ); ?></p>
+							<input type="text" name="email_msg_words" value="<?php echo esc_attr( $val['email_msg_words'] ); ?>" class="large-text" style="margin-top:6px;" placeholder="<?php esc_attr_e( 'Mensagem de erro para palavra bloqueada', 'elementor-pipedrive' ); ?>">
+						</td>
+					</tr>
+				</table>
+			</div>
+
+			<script>
+			document.getElementById('epd-email-block-toggle').addEventListener('change', function () {
+				document.getElementById('epd-email-block-fields').style.display = this.checked ? '' : 'none';
+			});
+			</script>
 		</div>
 
 		<!-- Mapeamento de Campos -->

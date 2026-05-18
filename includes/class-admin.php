@@ -182,6 +182,22 @@ class EPD_Admin {
 		$deal_title  = sanitize_text_field( $_POST['deal_title'] ?? 'Lead' );
 		$webhook_url = esc_url_raw( $_POST['webhook_url'] ?? '' );
 
+		// Validações por mapeamento.
+		$parse_lines = function( $raw ) {
+			return array_values( array_filter( array_map( 'sanitize_text_field', explode( "\n", str_replace( "\r", '', $raw ?? '' ) ) ) ) );
+		};
+
+		$validation_config = wp_json_encode( array(
+			'phone_validation'    => ! empty( $_POST['phone_validation'] ),
+			'email_block_enabled' => ! empty( $_POST['email_block_enabled'] ),
+			'email_block_domains' => $parse_lines( $_POST['email_block_domains'] ?? '' ),
+			'email_block_suffixes'=> $parse_lines( $_POST['email_block_suffixes'] ?? '' ),
+			'email_block_words'   => $parse_lines( $_POST['email_block_words'] ?? '' ),
+			'email_msg_domains'   => sanitize_text_field( $_POST['email_msg_domains'] ?? '' ),
+			'email_msg_suffixes'  => sanitize_text_field( $_POST['email_msg_suffixes'] ?? '' ),
+			'email_msg_words'     => sanitize_text_field( $_POST['email_msg_words'] ?? '' ),
+		) );
+
 		// Monta array de mapeamentos a partir dos campos do form.
 		$elementor_fields = $_POST['elementor_field'] ?? array();
 		$entities         = $_POST['entity'] ?? array();
@@ -203,14 +219,15 @@ class EPD_Admin {
 		}
 
 		$data = array(
-			'form_id'     => $form_id,
-			'form_name'   => $form_name,
-			'pipeline_id' => $pipeline_id,
-			'stage_id'    => $stage_id,
-			'deal_title'  => $deal_title,
-			'mappings'    => wp_json_encode( $mappings ),
-			'webhook_url' => $webhook_url,
-			'active'      => 1,
+			'form_id'           => $form_id,
+			'form_name'         => $form_name,
+			'pipeline_id'       => $pipeline_id,
+			'stage_id'          => $stage_id,
+			'deal_title'        => $deal_title,
+			'mappings'          => wp_json_encode( $mappings ),
+			'webhook_url'       => $webhook_url,
+			'validation_config' => $validation_config,
+			'active'            => 1,
 		);
 
 		if ( $mapping_id > 0 ) {
@@ -218,14 +235,14 @@ class EPD_Admin {
 				$table,
 				$data,
 				array( 'id' => $mapping_id ),
-				array( '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%d' ),
+				array( '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%s', '%d' ),
 				array( '%d' )
 			);
 		} else {
 			$result = $wpdb->insert(
 				$table,
 				$data,
-				array( '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%d' )
+				array( '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%s', '%d' )
 			);
 		}
 
