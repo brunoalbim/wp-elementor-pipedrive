@@ -209,6 +209,16 @@
 				$(this).closest('tr').remove();
 			});
 
+			// Adicionar linha do webhook field map.
+			$(document).on('click', '#epd-add-wh-row', function () {
+				self.addWebhookFieldRow();
+			});
+
+			// Remover linha do webhook field map.
+			$(document).on('click', '.epd-remove-wh-row', function () {
+				$(this).closest('tr').remove();
+			});
+
 			// Mudança de entidade → recarrega campos do Pipedrive.
 			$(document).on('change', '.epd-entity', function () {
 				var $row = $(this).closest('tr');
@@ -251,7 +261,7 @@
 			var self = this;
 			var fields = self._formFields;
 
-			$('.epd-elementor-field').each(function () {
+			$('.epd-elementor-field, .epd-wh-elementor-field').each(function () {
 				var $select = $(this);
 				var currentVal = $select.val();
 
@@ -276,6 +286,24 @@
 			// Preenche campos do Elementor no select recém-criado.
 			var $newRow = $('#epd-fields-body tr:last-child');
 			var $efSelect = $newRow.find('.epd-elementor-field');
+			$efSelect.empty().append('<option value="">' + epdData.i18n.selectField + '</option>');
+
+			self._formFields.forEach(function (field) {
+				$efSelect.append('<option value="' + self.esc(field.id) + '">' + self.esc(field.label) + ' (' + self.esc(field.id) + ')' + '</option>');
+			});
+		},
+
+		addWebhookFieldRow: function () {
+			var self = this;
+			var $template = $('#epd-wh-row-template');
+
+			if (!$template.length) { return; }
+
+			var $clone = $($template[0].innerHTML);
+			$('#epd-webhook-fields-body').append($clone);
+
+			var $newRow = $('#epd-webhook-fields-body tr:last-child');
+			var $efSelect = $newRow.find('.epd-wh-elementor-field');
 			$efSelect.empty().append('<option value="">' + epdData.i18n.selectField + '</option>');
 
 			self._formFields.forEach(function (field) {
@@ -397,24 +425,40 @@
 		rehydrateSavedRows: function () {
 			var self = this;
 
-			if (!epdEditData || !epdEditData.savedRows || !epdEditData.savedRows.length) {
-				return;
+			if (epdEditData && epdEditData.savedRows && epdEditData.savedRows.length) {
+				$('#epd-fields-body .epd-field-row').each(function (i) {
+					var $row = $(this);
+					var saved = epdEditData.savedRows[i];
+
+					if (!saved) { return; }
+
+					// Marca o valor do campo Pipedrive para ser selecionado após o carregamento.
+					$row.find('.epd-pipedrive-field').data('saved-value', saved.pipedrive_field);
+
+					// Aciona o carregamento dos campos do Pipedrive para a entidade salva.
+					var $entity = $row.find('.epd-entity');
+					$entity.val(saved.entity);
+					self.loadPipedriveFieldsInRow($row, saved.entity);
+				});
 			}
 
-			$('#epd-fields-body .epd-field-row').each(function (i) {
-				var $row = $(this);
-				var saved = epdEditData.savedRows[i];
+			// Re-hidrata linhas do webhook field map.
+			if (epdEditData && epdEditData.savedWebhookFields && epdEditData.savedWebhookFields.length) {
+				$('#epd-webhook-fields-body .epd-wh-field-row').each(function (i) {
+					var $row = $(this);
+					var saved = epdEditData.savedWebhookFields[i];
 
-				if (!saved) { return; }
+					if (!saved) { return; }
 
-				// Marca o valor do campo Pipedrive para ser selecionado após o carregamento.
-				$row.find('.epd-pipedrive-field').data('saved-value', saved.pipedrive_field);
-
-				// Aciona o carregamento dos campos do Pipedrive para a entidade salva.
-				var $entity = $row.find('.epd-entity');
-				$entity.val(saved.entity);
-				self.loadPipedriveFieldsInRow($row, saved.entity);
-			});
+					var $efSelect = $row.find('.epd-wh-elementor-field');
+					// Repopula o select com os campos do formulário (já carregados).
+					$efSelect.empty().append('<option value="">' + epdData.i18n.selectField + '</option>');
+					self._formFields.forEach(function (field) {
+						var selected = (field.id === saved.elementor_field) ? ' selected' : '';
+						$efSelect.append('<option value="' + self.esc(field.id) + '"' + selected + '>' + self.esc(field.label) + ' (' + self.esc(field.id) + ')' + '</option>');
+					});
+				});
+			}
 		},
 
 		// -------------------------------------------------------------------------

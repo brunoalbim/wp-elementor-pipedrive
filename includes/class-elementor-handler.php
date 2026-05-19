@@ -59,6 +59,9 @@ class EPD_Elementor_Handler {
 		);
 
 		// Persiste o submission com todos os dados necessários para retentativa.
+		$raw_wh_map   = ! empty( $mapping->webhook_field_map ) ? json_decode( $mapping->webhook_field_map, true ) : array();
+		$wh_field_map = is_array( $raw_wh_map ) ? $raw_wh_map : array();
+
 		$submission_id = $this->create_submission(
 			$form_id,
 			$mapping->form_name,
@@ -66,14 +69,15 @@ class EPD_Elementor_Handler {
 			$utms,
 			$saved_mappings,
 			$mapping,
-			$mapping->webhook_url
+			$mapping->webhook_url,
+			$wh_field_map
 		);
 
 		$created = $this->send_to_pipedrive( $data );
 		$this->update_submission_pipedrive( $submission_id, $created );
 
 		if ( ! empty( $mapping->webhook_url ) ) {
-			$webhook_result = $this->fire_webhook( $mapping->webhook_url, $created, $submitted, $utms );
+			$webhook_result = $this->fire_webhook( $mapping->webhook_url, $created, $submitted, $utms, $wh_field_map );
 			$this->update_submission_webhook( $submission_id, $webhook_result );
 		}
 	}
@@ -110,13 +114,14 @@ class EPD_Elementor_Handler {
 	// Submission persistence
 	// -------------------------------------------------------------------------
 
-	private function create_submission( $form_id, $form_name, $submitted, $utms, $saved_mappings, $mapping, $webhook_url ) {
+	private function create_submission( $form_id, $form_name, $submitted, $utms, $saved_mappings, $mapping, $webhook_url, $webhook_field_map = array() ) {
 		global $wpdb;
 
 		$submitted_data = wp_json_encode( array(
-			'fields'  => $submitted,
-			'utms'    => $utms,
-			'mapping' => array(
+			'fields'           => $submitted,
+			'utms'             => $utms,
+			'webhook_field_map'=> $webhook_field_map,
+			'mapping'          => array(
 				'pipeline_id' => $mapping->pipeline_id,
 				'stage_id'    => $mapping->stage_id,
 				'deal_title'  => $mapping->deal_title,
@@ -251,9 +256,10 @@ class EPD_Elementor_Handler {
 
 		// Se há webhook configurado, dispara automaticamente após Pipedrive OK.
 		if ( ! empty( $row->webhook_url ) ) {
-			$utms           = isset( $stored['utms'] ) ? $stored['utms'] : array();
-			$form_fields    = isset( $stored['fields'] ) ? $stored['fields'] : array();
-			$webhook_result = $this->fire_webhook( $row->webhook_url, $created, $form_fields, $utms );
+			$utms             = isset( $stored['utms'] ) ? $stored['utms'] : array();
+			$form_fields      = isset( $stored['fields'] ) ? $stored['fields'] : array();
+			$wh_field_map     = isset( $stored['webhook_field_map'] ) ? $stored['webhook_field_map'] : array();
+			$webhook_result   = $this->fire_webhook( $row->webhook_url, $created, $form_fields, $utms, $wh_field_map );
 			$this->update_submission_webhook( (int) $submission_id, $webhook_result );
 
 			$webhook_ok = is_numeric( $webhook_result ) && (int) $webhook_result >= 200 && (int) $webhook_result < 300;
@@ -304,8 +310,9 @@ class EPD_Elementor_Handler {
 			array( '%d' )
 		);
 
-		$form_fields = isset( $stored['fields'] ) ? $stored['fields'] : array();
-		$result = $this->fire_webhook( $row->webhook_url, $pipedrive_created, $form_fields, $utms );
+		$form_fields  = isset( $stored['fields'] ) ? $stored['fields'] : array();
+		$wh_field_map = isset( $stored['webhook_field_map'] ) ? $stored['webhook_field_map'] : array();
+		$result = $this->fire_webhook( $row->webhook_url, $pipedrive_created, $form_fields, $utms, $wh_field_map );
 		$this->update_submission_webhook( (int) $submission_id, $result );
 
 		$is_success = is_numeric( $result ) && (int) $result >= 200 && (int) $result < 300;
@@ -438,13 +445,30 @@ class EPD_Elementor_Handler {
 	/**
 	 * Dispara o webhook e retorna o HTTP status code (string) ou mensagem de erro.
 	 */
-	private function fire_webhook( $url, array $created, array $form_fields = array(), array $utms = array() ) {
+	private function fire_webhook( $url, array $created, array $form_fields = array(), array $utms = array(), array $webhook_field_map = array() ) {
 		// Remove campos internos de UTM dos campos do formulário antes de enviar.
 		$clean_fields = array();
 		foreach ( $form_fields as $key => $value ) {
 			if ( strpos( $key, 'epd_utm' ) !== 0 ) {
 				$clean_fields[ $key ] = $value;
 			}
+		}
+
+		// Aplica mapeamento de campos do webhook: renomeia chaves conforme configurado.
+		if ( ! empty( $webhook_field_map ) ) {
+			$mapped_fields = array();
+			// Índice para lookup rápido: elementor_field → webhook_key.
+			$wh_map_index = array();
+			foreach ( $webhook_field_map as $row ) {
+				if ( ! empty( $row['elementor_field'] ) && ! empty( $row['webhook_key'] ) ) {
+					$wh_map_index[ $row['elementor_field'] ] = $row['webhook_key'];
+				}
+			}
+			foreach ( $clean_fields as $key => $value ) {
+				$mapped_key = isset( $wh_map_index[ $key ] ) ? $wh_map_index[ $key ] : $key;
+				$mapped_fields[ $mapped_key ] = $value;
+			}
+			$clean_fields = $mapped_fields;
 		}
 
 		$form_data = $clean_fields;

@@ -11,6 +11,13 @@ if ( ! is_array( $saved_mappings ) ) {
 	$saved_mappings = array();
 }
 
+$saved_webhook_field_map = $is_edit && ! empty( $mapping->webhook_field_map )
+	? json_decode( $mapping->webhook_field_map, true )
+	: array();
+if ( ! is_array( $saved_webhook_field_map ) ) {
+	$saved_webhook_field_map = array();
+}
+
 $val_defaults = array(
 	'phone_validation'        => false,
 	'email_block_enabled'     => false,
@@ -100,28 +107,63 @@ $val = $is_edit && ! empty( $mapping->validation_config )
 			</table>
 		</div>
 
-		<!-- Webhook -->
+		<!-- Mapeamento de Campos -->
 		<div class="epd-card">
-			<h2><?php esc_html_e( 'Webhook (opcional)', 'elementor-pipedrive' ); ?></h2>
+			<h2><?php esc_html_e( 'Mapeamento de Campos do Pipedrive', 'elementor-pipedrive' ); ?></h2>
+			<p class="description" style="margin-bottom:15px;">
+				<?php esc_html_e( 'Relacione cada campo do formulário Elementor com o campo correspondente no Pipedrive. Nem todos os campos precisam ser mapeados.', 'elementor-pipedrive' ); ?>
+			</p>
 
-			<table class="form-table">
-				<tr>
-					<th><label for="epd-webhook-url"><?php esc_html_e( 'URL do Webhook', 'elementor-pipedrive' ); ?></label></th>
-					<td>
-						<input
-							type="url"
-							id="epd-webhook-url"
-							name="webhook_url"
-							value="<?php echo esc_attr( $is_edit ? $mapping->webhook_url : '' ); ?>"
-							class="large-text"
-							placeholder="https://..."
-						>
-						<p class="description">
-							<?php esc_html_e( 'Após criar Pessoa, Empresa e Negociação no Pipedrive, o plugin envia um POST com todos os dados para esta URL. Deixe em branco para desativar.', 'elementor-pipedrive' ); ?>
-						</p>
-					</td>
-				</tr>
+			<table class="widefat epd-fields-table" id="epd-fields-table">
+				<thead>
+					<tr>
+						<th style="width:30%"><?php esc_html_e( 'Campo do Elementor', 'elementor-pipedrive' ); ?></th>
+						<th style="width:20%"><?php esc_html_e( 'Destino', 'elementor-pipedrive' ); ?></th>
+						<th style="width:35%"><?php esc_html_e( 'Campo do Pipedrive', 'elementor-pipedrive' ); ?></th>
+						<th style="width:15%"></th>
+					</tr>
+				</thead>
+				<tbody id="epd-fields-body">
+					<?php if ( ! empty( $saved_mappings ) ) : ?>
+						<?php foreach ( $saved_mappings as $row ) : ?>
+						<tr class="epd-field-row">
+							<td>
+								<select name="elementor_field[]" class="epd-elementor-field widefat">
+									<option value="<?php echo esc_attr( $row['elementor_field'] ); ?>" selected>
+										<?php echo esc_html( $row['elementor_field'] ); ?>
+									</option>
+								</select>
+							</td>
+							<td>
+								<select name="entity[]" class="epd-entity widefat">
+									<option value="person" <?php selected( $row['entity'], 'person' ); ?>><?php esc_html_e( 'Pessoa', 'elementor-pipedrive' ); ?></option>
+									<option value="organization" <?php selected( $row['entity'], 'organization' ); ?>><?php esc_html_e( 'Empresa', 'elementor-pipedrive' ); ?></option>
+									<option value="deal" <?php selected( $row['entity'], 'deal' ); ?>><?php esc_html_e( 'Negociação', 'elementor-pipedrive' ); ?></option>
+								</select>
+							</td>
+							<td>
+								<select name="pipedrive_field[]" class="epd-pipedrive-field widefat">
+									<option value="<?php echo esc_attr( $row['pipedrive_field'] ); ?>" selected>
+										<?php echo esc_html( $row['pipedrive_field'] ); ?>
+									</option>
+								</select>
+							</td>
+							<td>
+								<button type="button" class="button button-small epd-remove-row">
+									<?php esc_html_e( 'Remover', 'elementor-pipedrive' ); ?>
+								</button>
+							</td>
+						</tr>
+						<?php endforeach; ?>
+					<?php endif; ?>
+				</tbody>
 			</table>
+
+			<p style="margin-top:15px;">
+				<button type="button" id="epd-add-row" class="button">
+					<?php esc_html_e( '+ Adicionar campo', 'elementor-pipedrive' ); ?>
+				</button>
+			</p>
 		</div>
 
 		<!-- Validações -->
@@ -191,61 +233,71 @@ $val = $is_edit && ! empty( $mapping->validation_config )
 			</script>
 		</div>
 
-		<!-- Mapeamento de Campos -->
+		<!-- Webhook -->
 		<div class="epd-card">
-			<h2><?php esc_html_e( 'Mapeamento de Campos', 'elementor-pipedrive' ); ?></h2>
+			<h2><?php esc_html_e( 'Webhook (opcional)', 'elementor-pipedrive' ); ?></h2>
+
+			<table class="form-table">
+				<tr>
+					<th><label for="epd-webhook-url"><?php esc_html_e( 'URL do Webhook', 'elementor-pipedrive' ); ?></label></th>
+					<td>
+						<input
+							type="url"
+							id="epd-webhook-url"
+							name="webhook_url"
+							value="<?php echo esc_attr( $is_edit ? $mapping->webhook_url : '' ); ?>"
+							class="large-text"
+							placeholder="https://..."
+						>
+						<p class="description">
+							<?php esc_html_e( 'Após criar Pessoa, Empresa e Negociação no Pipedrive, o plugin envia um POST com todos os dados para esta URL. Deixe em branco para desativar.', 'elementor-pipedrive' ); ?>
+						</p>
+					</td>
+				</tr>
+			</table>
+
+			<!-- Mapeamento de Campos do Webhook -->
+			<hr style="margin:20px 0; border:none; border-top:1px solid #f0f0f1;">
+
+			<h3 style="margin-top:0;"><?php esc_html_e( 'Mapeamento de Campos do Webhook (Opcional)', 'elementor-pipedrive' ); ?></h3>
 			<p class="description" style="margin-bottom:15px;">
-				<?php esc_html_e( 'Relacione cada campo do formulário Elementor com o campo correspondente no Pipedrive. Nem todos os campos precisam ser mapeados.', 'elementor-pipedrive' ); ?>
+				<?php esc_html_e( 'Renomeie os campos enviados no objeto "form" do webhook. Se um campo não estiver mapeado aqui, será enviado com o nome original do Elementor.', 'elementor-pipedrive' ); ?>
 			</p>
 
-			<table class="widefat epd-fields-table" id="epd-fields-table">
+			<table class="widefat epd-fields-table" id="epd-webhook-fields-table">
 				<thead>
 					<tr>
-						<th style="width:30%"><?php esc_html_e( 'Campo do Elementor', 'elementor-pipedrive' ); ?></th>
-						<th style="width:20%"><?php esc_html_e( 'Destino', 'elementor-pipedrive' ); ?></th>
-						<th style="width:35%"><?php esc_html_e( 'Campo do Pipedrive', 'elementor-pipedrive' ); ?></th>
+						<th style="width:45%"><?php esc_html_e( 'Campo do Elementor', 'elementor-pipedrive' ); ?></th>
+						<th style="width:40%"><?php esc_html_e( 'Chave no Webhook', 'elementor-pipedrive' ); ?></th>
 						<th style="width:15%"></th>
 					</tr>
 				</thead>
-				<tbody id="epd-fields-body">
-					<?php if ( ! empty( $saved_mappings ) ) : ?>
-						<?php foreach ( $saved_mappings as $row ) : ?>
-						<tr class="epd-field-row">
-							<td>
-								<select name="elementor_field[]" class="epd-elementor-field widefat">
-									<option value="<?php echo esc_attr( $row['elementor_field'] ); ?>" selected>
-										<?php echo esc_html( $row['elementor_field'] ); ?>
-									</option>
-								</select>
-							</td>
-							<td>
-								<select name="entity[]" class="epd-entity widefat">
-									<option value="person" <?php selected( $row['entity'], 'person' ); ?>><?php esc_html_e( 'Pessoa', 'elementor-pipedrive' ); ?></option>
-									<option value="organization" <?php selected( $row['entity'], 'organization' ); ?>><?php esc_html_e( 'Empresa', 'elementor-pipedrive' ); ?></option>
-									<option value="deal" <?php selected( $row['entity'], 'deal' ); ?>><?php esc_html_e( 'Negociação', 'elementor-pipedrive' ); ?></option>
-								</select>
-							</td>
-							<td>
-								<select name="pipedrive_field[]" class="epd-pipedrive-field widefat">
-									<option value="<?php echo esc_attr( $row['pipedrive_field'] ); ?>" selected>
-										<?php echo esc_html( $row['pipedrive_field'] ); ?>
-									</option>
-								</select>
-							</td>
-							<td>
-								<button type="button" class="button button-small epd-remove-row">
-									<?php esc_html_e( 'Remover', 'elementor-pipedrive' ); ?>
-								</button>
-							</td>
-						</tr>
-						<?php endforeach; ?>
-					<?php endif; ?>
+				<tbody id="epd-webhook-fields-body">
+					<?php foreach ( $saved_webhook_field_map as $wh_row ) : ?>
+					<tr class="epd-wh-field-row">
+						<td>
+							<select name="wh_elementor_field[]" class="epd-wh-elementor-field widefat">
+								<option value="<?php echo esc_attr( $wh_row['elementor_field'] ); ?>" selected>
+									<?php echo esc_html( $wh_row['elementor_field'] ); ?>
+								</option>
+							</select>
+						</td>
+						<td>
+							<input type="text" name="wh_webhook_key[]" class="widefat" value="<?php echo esc_attr( $wh_row['webhook_key'] ); ?>" placeholder="<?php esc_attr_e( 'ex: phone_number', 'elementor-pipedrive' ); ?>">
+						</td>
+						<td>
+							<button type="button" class="button button-small epd-remove-wh-row">
+								<?php esc_html_e( 'Remover', 'elementor-pipedrive' ); ?>
+							</button>
+						</td>
+					</tr>
+					<?php endforeach; ?>
 				</tbody>
 			</table>
 
 			<p style="margin-top:15px;">
-				<button type="button" id="epd-add-row" class="button">
-					<?php esc_html_e( '+ Adicionar campo', 'elementor-pipedrive' ); ?>
+				<button type="button" id="epd-add-wh-row" class="button">
+					<?php esc_html_e( '+ Adicionar mapeamento', 'elementor-pipedrive' ); ?>
 				</button>
 			</p>
 		</div>
@@ -288,12 +340,32 @@ $val = $is_edit && ! empty( $mapping->validation_config )
 	</tr>
 </template>
 
+<!-- Template de linha do webhook -->
+<template id="epd-wh-row-template">
+	<tr class="epd-wh-field-row">
+		<td>
+			<select name="wh_elementor_field[]" class="epd-wh-elementor-field widefat">
+				<option value=""><?php esc_html_e( '— Campo do formulário —', 'elementor-pipedrive' ); ?></option>
+			</select>
+		</td>
+		<td>
+			<input type="text" name="wh_webhook_key[]" class="widefat" placeholder="<?php esc_attr_e( 'ex: phone_number', 'elementor-pipedrive' ); ?>">
+		</td>
+		<td>
+			<button type="button" class="button button-small epd-remove-wh-row">
+				<?php esc_html_e( 'Remover', 'elementor-pipedrive' ); ?>
+			</button>
+		</td>
+	</tr>
+</template>
+
 <script>
 // Dados iniciais para re-hidratação ao editar
 var epdEditData = {
-	formId:     '<?php echo esc_js( $is_edit ? $mapping->form_id : '' ); ?>',
-	pipelineId: '<?php echo esc_js( $is_edit ? (string) $mapping->pipeline_id : '' ); ?>',
-	stageId:    '<?php echo esc_js( $is_edit ? (string) $mapping->stage_id : '' ); ?>',
-	savedRows:  <?php echo wp_json_encode( $saved_mappings ); ?>
+	formId:             '<?php echo esc_js( $is_edit ? $mapping->form_id : '' ); ?>',
+	pipelineId:         '<?php echo esc_js( $is_edit ? (string) $mapping->pipeline_id : '' ); ?>',
+	stageId:            '<?php echo esc_js( $is_edit ? (string) $mapping->stage_id : '' ); ?>',
+	savedRows:          <?php echo wp_json_encode( $saved_mappings ); ?>,
+	savedWebhookFields: <?php echo wp_json_encode( $saved_webhook_field_map ); ?>
 };
 </script>

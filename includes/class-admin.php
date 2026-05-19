@@ -218,6 +218,23 @@ class EPD_Admin {
 			}
 		}
 
+		// Mapeamento de campos do webhook.
+		$wh_elementor_fields = $_POST['wh_elementor_field'] ?? array();
+		$wh_webhook_keys     = $_POST['wh_webhook_key'] ?? array();
+		$webhook_field_map   = array();
+
+		foreach ( $wh_elementor_fields as $i => $ef ) {
+			$ef  = sanitize_text_field( $ef );
+			$key = sanitize_text_field( $wh_webhook_keys[ $i ] ?? '' );
+
+			if ( $ef && $key ) {
+				$webhook_field_map[] = array(
+					'elementor_field' => $ef,
+					'webhook_key'     => $key,
+				);
+			}
+		}
+
 		$data = array(
 			'form_id'           => $form_id,
 			'form_name'         => $form_name,
@@ -226,6 +243,7 @@ class EPD_Admin {
 			'deal_title'        => $deal_title,
 			'mappings'          => wp_json_encode( $mappings ),
 			'webhook_url'       => $webhook_url,
+			'webhook_field_map' => wp_json_encode( $webhook_field_map ),
 			'validation_config' => $validation_config,
 			'active'            => 1,
 		);
@@ -235,14 +253,14 @@ class EPD_Admin {
 				$table,
 				$data,
 				array( 'id' => $mapping_id ),
-				array( '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%s', '%d' ),
+				array( '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%s', '%s', '%d' ),
 				array( '%d' )
 			);
 		} else {
 			$result = $wpdb->insert(
 				$table,
 				$data,
-				array( '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%s', '%d' )
+				array( '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%s', '%s', '%d' )
 			);
 		}
 
@@ -302,16 +320,18 @@ class EPD_Admin {
 		$wpdb->insert(
 			$table,
 			array(
-				'form_id'     => $original->form_id,
-				'form_name'   => $original->form_name . ' (Cópia)',
-				'pipeline_id' => $original->pipeline_id,
-				'stage_id'    => $original->stage_id,
-				'deal_title'  => $original->deal_title,
-				'mappings'    => $original->mappings,
-				'webhook_url' => $original->webhook_url,
-				'active'      => 0,
+				'form_id'           => $original->form_id,
+				'form_name'         => $original->form_name . ' (Cópia)',
+				'pipeline_id'       => $original->pipeline_id,
+				'stage_id'          => $original->stage_id,
+				'deal_title'        => $original->deal_title,
+				'mappings'          => $original->mappings,
+				'webhook_url'       => $original->webhook_url,
+				'webhook_field_map' => $original->webhook_field_map,
+				'validation_config' => $original->validation_config,
+				'active'            => 0,
 			),
-			array( '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%d' )
+			array( '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%s', '%s', '%d' )
 		);
 
 		$new_id = (int) $wpdb->insert_id;
