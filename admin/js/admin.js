@@ -137,6 +137,34 @@
 					alert('Erro de conexão.');
 				});
 			});
+
+			// Retentar Brevo.
+			$(document).on('click', '.epd-retry-brevo', function () {
+				var $btn = $(this);
+				var id   = $btn.data('id');
+				var $row = $btn.closest('tr');
+
+				$btn.addClass('is-loading').text('Enviando...');
+
+				$.post(epdData.ajaxUrl, {
+					action: 'epd_retry_brevo',
+					nonce: epdData.nonce,
+					submission_id: id,
+				}, function (response) {
+					if (response.success) {
+						var code = response.data.http_code || '201';
+						$row.find('.epd-brevo-cell').html('<span class="epd-badge epd-badge-active">✓ HTTP ' + self.esc(String(code)) + '</span>');
+						$btn.remove();
+					} else {
+						$row.find('.epd-brevo-cell').html('<span class="epd-badge epd-badge-inactive">✗ Erro</span>');
+						$btn.removeClass('is-loading').text('↺ Retentar Brevo');
+						alert('Erro: ' + response.data);
+					}
+				}).fail(function () {
+					$btn.removeClass('is-loading').text('↺ Retentar Brevo');
+					alert('Erro de conexão.');
+				});
+			});
 		},
 
 		// -------------------------------------------------------------------------
@@ -162,14 +190,16 @@
 				}
 			});
 
-			// Carrega pipelines e inicializa.
-			self.loadPipelines(function () {
-				if (epdEditData.pipelineId) {
-					$('#epd-pipeline-select').val(epdEditData.pipelineId);
-					$('#epd-pipeline-id').val(epdEditData.pipelineId);
-					$('#epd-pipeline-select').trigger('change');
-				}
-			});
+			// Carrega pipelines e inicializa — apenas se Pipedrive estiver ativo.
+			if (epdEditData.pipedriveActive) {
+				self.loadPipelines(function () {
+					if (epdEditData.pipelineId) {
+						$('#epd-pipeline-select').val(epdEditData.pipelineId);
+						$('#epd-pipeline-id').val(epdEditData.pipelineId);
+						$('#epd-pipeline-select').trigger('change');
+					}
+				});
+			}
 
 			// Eventos de formulário selecionado.
 			$(document).on('change', '#epd-form-select', function () {
@@ -219,6 +249,16 @@
 				$(this).closest('tr').remove();
 			});
 
+			// Adicionar linha do Brevo field map.
+			$(document).on('click', '#epd-add-brevo-row', function () {
+				self.addBrevoFieldRow();
+			});
+
+			// Remover linha do Brevo field map.
+			$(document).on('click', '.epd-remove-brevo-row', function () {
+				$(this).closest('tr').remove();
+			});
+
 			// Mudança de entidade → recarrega campos do Pipedrive.
 			$(document).on('change', '.epd-entity', function () {
 				var $row = $(this).closest('tr');
@@ -261,7 +301,7 @@
 			var self = this;
 			var fields = self._formFields;
 
-			$('.epd-elementor-field, .epd-wh-elementor-field').each(function () {
+			$('.epd-elementor-field, .epd-wh-elementor-field, .epd-brevo-elementor-field').each(function () {
 				var $select = $(this);
 				var currentVal = $select.val();
 
@@ -304,6 +344,24 @@
 
 			var $newRow = $('#epd-webhook-fields-body tr:last-child');
 			var $efSelect = $newRow.find('.epd-wh-elementor-field');
+			$efSelect.empty().append('<option value="">' + epdData.i18n.selectField + '</option>');
+
+			self._formFields.forEach(function (field) {
+				$efSelect.append('<option value="' + self.esc(field.id) + '">' + self.esc(field.label) + ' (' + self.esc(field.id) + ')' + '</option>');
+			});
+		},
+
+		addBrevoFieldRow: function () {
+			var self = this;
+			var $template = $('#epd-brevo-row-template');
+
+			if (!$template.length) { return; }
+
+			var $clone = $($template[0].innerHTML);
+			$('#epd-brevo-fields-body').append($clone);
+
+			var $newRow = $('#epd-brevo-fields-body tr:last-child');
+			var $efSelect = $newRow.find('.epd-brevo-elementor-field');
 			$efSelect.empty().append('<option value="">' + epdData.i18n.selectField + '</option>');
 
 			self._formFields.forEach(function (field) {
@@ -451,7 +509,23 @@
 					if (!saved) { return; }
 
 					var $efSelect = $row.find('.epd-wh-elementor-field');
-					// Repopula o select com os campos do formulário (já carregados).
+					$efSelect.empty().append('<option value="">' + epdData.i18n.selectField + '</option>');
+					self._formFields.forEach(function (field) {
+						var selected = (field.id === saved.elementor_field) ? ' selected' : '';
+						$efSelect.append('<option value="' + self.esc(field.id) + '"' + selected + '>' + self.esc(field.label) + ' (' + self.esc(field.id) + ')' + '</option>');
+					});
+				});
+			}
+
+			// Re-hidrata linhas do Brevo field map.
+			if (epdEditData && epdEditData.savedBrevoFields && epdEditData.savedBrevoFields.length) {
+				$('#epd-brevo-fields-body .epd-brevo-field-row').each(function (i) {
+					var $row = $(this);
+					var saved = epdEditData.savedBrevoFields[i];
+
+					if (!saved) { return; }
+
+					var $efSelect = $row.find('.epd-brevo-elementor-field');
 					$efSelect.empty().append('<option value="">' + epdData.i18n.selectField + '</option>');
 					self._formFields.forEach(function (field) {
 						var selected = (field.id === saved.elementor_field) ? ' selected' : '';

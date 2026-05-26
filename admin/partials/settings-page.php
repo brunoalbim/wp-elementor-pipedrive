@@ -9,12 +9,16 @@
 		</div>
 	<?php endif; ?>
 
-	<div class="epd-card">
-		<h2><?php esc_html_e( 'Conexão com o Pipedrive', 'elementor-pipedrive' ); ?></h2>
+	<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+		<input type="hidden" name="action" value="epd_save_settings">
+		<?php wp_nonce_field( 'epd_save_settings' ); ?>
 
-		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-			<input type="hidden" name="action" value="epd_save_settings">
-			<?php wp_nonce_field( 'epd_save_settings' ); ?>
+		<!-- Pipedrive -->
+		<div class="epd-card">
+			<h2><?php esc_html_e( 'Integração Pipedrive', 'elementor-pipedrive' ); ?></h2>
+			<p class="description" style="margin-bottom:15px;">
+				<?php esc_html_e( 'Preencha os campos abaixo para ativar a integração com o Pipedrive. Deixe em branco para desativar.', 'elementor-pipedrive' ); ?>
+			</p>
 
 			<table class="form-table">
 				<tr>
@@ -55,13 +59,46 @@
 				</tr>
 			</table>
 
-			<p class="submit">
-				<?php submit_button( __( 'Salvar configurações', 'elementor-pipedrive' ), 'primary', 'submit', false ); ?>
-				<button type="button" id="epd-test-connection" class="button button-secondary" style="margin-left:10px;">
+			<div style="padding:12px 0 4px;">
+				<button type="button" id="epd-test-connection" class="button button-secondary">
 					<?php esc_html_e( 'Testar Conexão', 'elementor-pipedrive' ); ?>
 				</button>
 				<span id="epd-connection-result" style="margin-left:10px; vertical-align:middle;"></span>
+			</div>
+		</div>
+
+		<!-- Brevo -->
+		<div class="epd-card">
+			<h2><?php esc_html_e( 'Integração Brevo', 'elementor-pipedrive' ); ?></h2>
+			<p class="description" style="margin-bottom:15px;">
+				<?php esc_html_e( 'Preencha a API Key abaixo para ativar a integração com o Brevo. Deixe em branco para desativar.', 'elementor-pipedrive' ); ?>
 			</p>
-		</form>
-	</div>
+
+			<table class="form-table">
+				<tr>
+					<th scope="row">
+						<label for="epd_brevo_api_key"><?php esc_html_e( 'API Key', 'elementor-pipedrive' ); ?></label>
+					</th>
+					<td>
+						<input
+							type="password"
+							id="epd_brevo_api_key"
+							name="epd_brevo_api_key"
+							value="<?php echo esc_attr( get_option( 'epd_brevo_api_key', '' ) ); ?>"
+							class="regular-text"
+							autocomplete="new-password"
+						>
+						<p class="description">
+							<?php esc_html_e( 'Encontre em: Brevo → Configurações → SMTP & API → Chaves de API', 'elementor-pipedrive' ); ?>
+						</p>
+					</td>
+				</tr>
+			</table>
+		</div>
+
+		<p class="submit">
+			<?php submit_button( __( 'Salvar configurações', 'elementor-pipedrive' ), 'primary', 'submit', false ); ?>
+		</p>
+
+	</form>
 </div>

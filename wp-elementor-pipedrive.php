@@ -3,7 +3,7 @@
  * Plugin Name: Elementor Pipedrive Integration
  * Plugin URI:  https://bruno.art.br
  * Description: Captura dados de formulários Elementor Pro e cria Pessoa, Empresa e Negociação no Pipedrive.
- * Version:     1.6.1
+ * Version:     1.7.0
  * Author:      Bruno Albim
  * Author URI:  https://bruno.art.br
  * License:     GPL-2.0+
@@ -15,13 +15,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'EPD_VERSION', '1.6.1' );
+define( 'EPD_VERSION', '1.7.0' );
 define( 'EPD_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'EPD_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'EPD_PLUGIN_FILE', __FILE__ );
 
 require_once EPD_PLUGIN_DIR . 'includes/class-activator.php';
 require_once EPD_PLUGIN_DIR . 'includes/class-pipedrive-api.php';
+require_once EPD_PLUGIN_DIR . 'includes/class-brevo-api.php';
 require_once EPD_PLUGIN_DIR . 'includes/class-field-mapper.php';
 require_once EPD_PLUGIN_DIR . 'includes/class-elementor-handler.php';
 require_once EPD_PLUGIN_DIR . 'includes/class-admin.php';
@@ -31,6 +32,12 @@ register_deactivation_hook( __FILE__, array( 'EPD_Activator', 'deactivate' ) );
 
 function epd_init() {
 	load_plugin_textdomain( 'elementor-pipedrive', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
+
+	// Roda upgrade do banco sempre que a versão salva for diferente da atual.
+	// Isso garante que atualizações de plugin (sem reativação) também migrem o schema.
+	if ( get_option( 'epd_version' ) !== EPD_VERSION ) {
+		EPD_Activator::activate();
+	}
 
 	new EPD_Admin();
 	new EPD_Elementor_Handler();

@@ -24,6 +24,7 @@ class EPD_Admin {
 		add_action( 'wp_ajax_epd_get_form_fields', array( $this, 'ajax_get_form_fields' ) );
 		add_action( 'wp_ajax_epd_retry_pipedrive', array( $this, 'ajax_retry_pipedrive' ) );
 		add_action( 'wp_ajax_epd_retry_webhook', array( $this, 'ajax_retry_webhook' ) );
+		add_action( 'wp_ajax_epd_retry_brevo', array( $this, 'ajax_retry_brevo' ) );
 	}
 
 	// -------------------------------------------------------------------------
@@ -159,6 +160,7 @@ class EPD_Admin {
 
 		update_option( 'epd_api_token', sanitize_text_field( $_POST['epd_api_token'] ?? '' ) );
 		update_option( 'epd_company_domain', sanitize_text_field( $_POST['epd_company_domain'] ?? '' ) );
+		update_option( 'epd_brevo_api_key', sanitize_text_field( $_POST['epd_brevo_api_key'] ?? '' ) );
 
 		wp_redirect( add_query_arg( array( 'page' => 'epd-settings', 'saved' => '1' ), admin_url( 'admin.php' ) ) );
 		exit;
@@ -235,6 +237,25 @@ class EPD_Admin {
 			}
 		}
 
+		// Mapeamento de campos do Brevo.
+		$brevo_enabled    = ! empty( $_POST['brevo_enabled'] ) ? 1 : 0;
+		$brevo_list_id    = isset( $_POST['brevo_list_id'] ) ? ( (int) $_POST['brevo_list_id'] ?: null ) : null;
+		$brevo_ef_arr     = $_POST['brevo_elementor_field'] ?? array();
+		$brevo_att_arr    = $_POST['brevo_attribute'] ?? array();
+		$brevo_field_map  = array();
+
+		foreach ( $brevo_ef_arr as $i => $ef ) {
+			$ef   = sanitize_text_field( $ef );
+			$attr = sanitize_text_field( $brevo_att_arr[ $i ] ?? '' );
+
+			if ( $ef && $attr ) {
+				$brevo_field_map[] = array(
+					'elementor_field' => $ef,
+					'brevo_attribute' => $attr,
+				);
+			}
+		}
+
 		$data = array(
 			'form_id'           => $form_id,
 			'form_name'         => $form_name,
@@ -244,6 +265,9 @@ class EPD_Admin {
 			'mappings'          => wp_json_encode( $mappings ),
 			'webhook_url'       => $webhook_url,
 			'webhook_field_map' => wp_json_encode( $webhook_field_map ),
+			'brevo_enabled'     => $brevo_enabled,
+			'brevo_list_id'     => $brevo_list_id,
+			'brevo_field_map'   => wp_json_encode( $brevo_field_map ),
 			'validation_config' => $validation_config,
 			'active'            => 1,
 		);
@@ -253,14 +277,14 @@ class EPD_Admin {
 				$table,
 				$data,
 				array( 'id' => $mapping_id ),
-				array( '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%s', '%s', '%d' ),
+				array( '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%s', '%d', '%d', '%s', '%s', '%d' ),
 				array( '%d' )
 			);
 		} else {
 			$result = $wpdb->insert(
 				$table,
 				$data,
-				array( '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%s', '%s', '%d' )
+				array( '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%s', '%d', '%d', '%s', '%s', '%d' )
 			);
 		}
 
@@ -328,10 +352,13 @@ class EPD_Admin {
 				'mappings'          => $original->mappings,
 				'webhook_url'       => $original->webhook_url,
 				'webhook_field_map' => $original->webhook_field_map,
+				'brevo_enabled'     => $original->brevo_enabled ?? 0,
+				'brevo_list_id'     => $original->brevo_list_id ?? null,
+				'brevo_field_map'   => $original->brevo_field_map ?? '',
 				'validation_config' => $original->validation_config,
 				'active'            => 0,
 			),
-			array( '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%s', '%s', '%d' )
+			array( '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%s', '%d', '%d', '%s', '%s', '%d' )
 		);
 
 		$new_id = (int) $wpdb->insert_id;
@@ -504,6 +531,25 @@ class EPD_Admin {
 			wp_send_json_success( $result );
 		} else {
 			wp_send_json_error( isset( $result['error'] ) ? $result['error'] : 'Erro no webhook.' );
+		}
+	}
+
+	public function ajax_retry_brevo() {
+		$this->verify_ajax_nonce();
+
+		$submission_id = (int) ( $_POST['submission_id'] ?? 0 );
+
+		if ( ! $submission_id ) {
+			wp_send_json_error( 'submission_id inválido.' );
+		}
+
+		$handler = new EPD_Elementor_Handler();
+		$result  = $handler->retry_brevo( $submission_id );
+
+		if ( $result['success'] ) {
+			wp_send_json_success( $result );
+		} else {
+			wp_send_json_error( isset( $result['error'] ) ? $result['error'] : 'Erro no Brevo.' );
 		}
 	}
 

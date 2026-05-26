@@ -21,8 +21,9 @@ $submissions = $this->get_submissions( 100 );
 					<tr>
 						<th style="width:140px;"><?php esc_html_e( 'Data/Hora', 'elementor-pipedrive' ); ?></th>
 						<th style="width:180px;"><?php esc_html_e( 'Formulário', 'elementor-pipedrive' ); ?></th>
-						<th style="width:200px;"><?php esc_html_e( 'Pipedrive', 'elementor-pipedrive' ); ?></th>
-						<th style="width:180px;"><?php esc_html_e( 'Webhook', 'elementor-pipedrive' ); ?></th>
+						<th style="width:180px;"><?php esc_html_e( 'Pipedrive', 'elementor-pipedrive' ); ?></th>
+						<th style="width:150px;"><?php esc_html_e( 'Brevo', 'elementor-pipedrive' ); ?></th>
+						<th style="width:150px;"><?php esc_html_e( 'Webhook', 'elementor-pipedrive' ); ?></th>
 						<th><?php esc_html_e( 'Ações', 'elementor-pipedrive' ); ?></th>
 					</tr>
 				</thead>
@@ -41,6 +42,9 @@ $submissions = $this->get_submissions( 100 );
 						<td class="epd-pd-cell">
 							<?php echo epd_pipedrive_badge( $sub->pipedrive_status, $pd_result ); ?>
 						</td>
+						<td class="epd-brevo-cell">
+							<?php echo epd_brevo_badge( $sub->brevo_status ?? 'skipped', $sub->brevo_result ?? '' ); ?>
+						</td>
 						<td class="epd-wh-cell">
 							<?php echo epd_webhook_badge( $sub->webhook_status, $sub->webhook_result, $sub->webhook_url ); ?>
 						</td>
@@ -51,7 +55,18 @@ $submissions = $this->get_submissions( 100 );
 									class="button button-small epd-retry-pipedrive"
 									data-id="<?php echo (int) $sub->id; ?>"
 								>&#8635; <?php esc_html_e( 'Retentar Pipedrive', 'elementor-pipedrive' ); ?></button>
-							<?php elseif ( ! empty( $sub->webhook_url ) && ( $sub->webhook_status === 'error' || $sub->webhook_status === 'pending' ) ) : ?>
+							<?php endif; ?>
+
+							<?php $brevo_status = $sub->brevo_status ?? 'skipped'; ?>
+							<?php if ( $brevo_status === 'error' || $brevo_status === 'pending' ) : ?>
+								<button
+									type="button"
+									class="button button-small epd-retry-brevo"
+									data-id="<?php echo (int) $sub->id; ?>"
+								>&#8635; <?php esc_html_e( 'Retentar Brevo', 'elementor-pipedrive' ); ?></button>
+							<?php endif; ?>
+
+							<?php if ( ! empty( $sub->webhook_url ) && ( $sub->webhook_status === 'error' || $sub->webhook_status === 'pending' ) ) : ?>
 								<button
 									type="button"
 									class="button button-small epd-retry-webhook"
@@ -72,7 +87,7 @@ $submissions = $this->get_submissions( 100 );
 
 					<?php if ( ! empty( $stored_data ) ) : ?>
 					<tr class="epd-details-row" id="epd-details-<?php echo (int) $sub->id; ?>" style="display:none;">
-						<td colspan="5" style="background:#f9f9f9; padding:12px 16px;">
+						<td colspan="6" style="background:#f9f9f9; padding:12px 16px;">
 							<?php if ( ! empty( $stored_data['fields'] ) ) : ?>
 								<strong><?php esc_html_e( 'Campos do formulário:', 'elementor-pipedrive' ); ?></strong>
 								<ul style="margin:6px 0 12px 16px;">
@@ -114,6 +129,19 @@ function epd_pipedrive_badge( $status, $result ) {
 		case 'error':
 			$error = isset( $result['error'] ) ? $result['error'] : __( 'Erro', 'elementor-pipedrive' );
 			return '<span class="epd-badge epd-badge-inactive" title="' . esc_attr( $error ) . '">✗ ' . esc_html( __( 'Erro', 'elementor-pipedrive' ) ) . '</span>';
+		case 'pending':
+			return '<span class="epd-badge epd-badge-pending">⏳ ' . esc_html__( 'Pendente', 'elementor-pipedrive' ) . '</span>';
+		default:
+			return '<span class="epd-badge epd-badge-inactive">—</span>';
+	}
+}
+
+function epd_brevo_badge( $status, $result ) {
+	switch ( $status ) {
+		case 'success':
+			return '<span class="epd-badge epd-badge-active">✓ HTTP ' . esc_html( $result ) . '</span>';
+		case 'error':
+			return '<span class="epd-badge epd-badge-inactive" title="' . esc_attr( $result ) . '">✗ ' . esc_html( $result ?: __( 'Erro', 'elementor-pipedrive' ) ) . '</span>';
 		case 'pending':
 			return '<span class="epd-badge epd-badge-pending">⏳ ' . esc_html__( 'Pendente', 'elementor-pipedrive' ) . '</span>';
 		default:

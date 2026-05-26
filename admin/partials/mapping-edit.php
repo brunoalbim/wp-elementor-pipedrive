@@ -18,6 +18,20 @@ if ( ! is_array( $saved_webhook_field_map ) ) {
 	$saved_webhook_field_map = array();
 }
 
+// Verifica quais integrações estão configuradas nas Configurações globais.
+$pipedrive_active = ! empty( get_option( 'epd_api_token', '' ) ) && ! empty( get_option( 'epd_company_domain', '' ) );
+$brevo_active     = ! empty( get_option( 'epd_brevo_api_key', '' ) );
+
+// Dados salvos do Brevo para este mapeamento.
+$brevo_enabled = $is_edit ? (bool) ( $mapping->brevo_enabled ?? 0 ) : false;
+$brevo_list_id = $is_edit && ! empty( $mapping->brevo_list_id ) ? (int) $mapping->brevo_list_id : '';
+$saved_brevo_field_map = $is_edit && ! empty( $mapping->brevo_field_map )
+	? json_decode( $mapping->brevo_field_map, true )
+	: array();
+if ( ! is_array( $saved_brevo_field_map ) ) {
+	$saved_brevo_field_map = array();
+}
+
 $val_defaults = array(
 	'phone_validation'        => false,
 	'email_block_enabled'     => false,
@@ -60,12 +74,25 @@ $val = $is_edit && ! empty( $mapping->validation_config )
 						</select>
 						<input type="hidden" name="form_id" id="epd-form-id" value="<?php echo esc_attr( $is_edit ? $mapping->form_id : '' ); ?>">
 						<input type="hidden" name="form_name" id="epd-form-name" value="<?php echo esc_attr( $is_edit ? $mapping->form_name : '' ); ?>">
-						<p class="description"><?php esc_html_e( 'Selecione o formulário cujos dados serão enviados ao Pipedrive.', 'elementor-pipedrive' ); ?></p>
+						<p class="description"><?php esc_html_e( 'Selecione o formulário cujos dados serão capturados e processados pelas integrações ativas.', 'elementor-pipedrive' ); ?></p>
 					</td>
 				</tr>
 			</table>
 		</div>
 
+		<?php if ( ! $pipedrive_active ) : ?>
+		<div class="notice notice-info" style="margin:0 0 20px; padding:10px 15px;">
+			<p>
+				<?php esc_html_e( '⚡ As integrações são controladas pelas ', 'elementor-pipedrive' ); ?>
+				<a href="<?php echo esc_url( admin_url( 'admin.php?page=epd-settings' ) ); ?>">
+					<?php esc_html_e( 'Configurações do plugin', 'elementor-pipedrive' ); ?>
+				</a>.
+				<?php esc_html_e( 'Configure as API Keys para ativar Pipedrive e/ou Brevo.', 'elementor-pipedrive' ); ?>
+			</p>
+		</div>
+		<?php endif; ?>
+
+		<?php if ( $pipedrive_active ) : ?>
 		<!-- Pipeline & Stage -->
 		<div class="epd-card">
 			<h2><?php esc_html_e( 'Pipeline e Etapa', 'elementor-pipedrive' ); ?></h2>
@@ -107,7 +134,7 @@ $val = $is_edit && ! empty( $mapping->validation_config )
 			</table>
 		</div>
 
-		<!-- Mapeamento de Campos -->
+		<!-- Mapeamento de Campos Pipedrive -->
 		<div class="epd-card">
 			<h2><?php esc_html_e( 'Mapeamento de Campos do Pipedrive', 'elementor-pipedrive' ); ?></h2>
 			<p class="description" style="margin-bottom:15px;">
@@ -165,6 +192,8 @@ $val = $is_edit && ! empty( $mapping->validation_config )
 				</button>
 			</p>
 		</div>
+
+		<?php endif; // fim: $pipedrive_active ?>
 
 		<!-- Validações -->
 		<div class="epd-card">
@@ -250,7 +279,7 @@ $val = $is_edit && ! empty( $mapping->validation_config )
 							placeholder="https://..."
 						>
 						<p class="description">
-							<?php esc_html_e( 'Após criar Pessoa, Empresa e Negociação no Pipedrive, o plugin envia um POST com todos os dados para esta URL. Deixe em branco para desativar.', 'elementor-pipedrive' ); ?>
+							<?php esc_html_e( 'O plugin envia um POST com todos os dados do formulário (e das integrações ativas) para esta URL. Deixe em branco para desativar.', 'elementor-pipedrive' ); ?>
 						</p>
 					</td>
 				</tr>
@@ -301,6 +330,113 @@ $val = $is_edit && ! empty( $mapping->validation_config )
 				</button>
 			</p>
 		</div>
+
+		<?php if ( $brevo_active ) : ?>
+		<!-- Brevo -->
+		<div class="epd-card">
+			<h2><?php esc_html_e( 'Brevo (opcional)', 'elementor-pipedrive' ); ?></h2>
+
+			<table class="form-table">
+				<tr>
+					<th><?php esc_html_e( 'Habilitar Brevo', 'elementor-pipedrive' ); ?></th>
+					<td>
+						<label>
+							<input
+								type="checkbox"
+								name="brevo_enabled"
+								id="epd-brevo-toggle"
+								value="1"
+								<?php checked( $brevo_enabled ); ?>
+							>
+							<?php esc_html_e( 'Criar/atualizar contato no Brevo ao receber este formulário', 'elementor-pipedrive' ); ?>
+						</label>
+					</td>
+				</tr>
+			</table>
+
+			<div id="epd-brevo-fields" style="<?php echo $brevo_enabled ? '' : 'display:none;'; ?> margin-top:15px; padding-left:20px; border-left:3px solid #f0f0f1;">
+
+				<table class="form-table" style="margin-top:0;">
+					<tr>
+						<th style="width:220px;">
+							<label for="epd-brevo-list-id"><?php esc_html_e( 'ID da Lista Brevo', 'elementor-pipedrive' ); ?></label>
+						</th>
+						<td>
+							<input
+								type="number"
+								id="epd-brevo-list-id"
+								name="brevo_list_id"
+								value="<?php echo esc_attr( $brevo_list_id ); ?>"
+								class="small-text"
+								min="1"
+								placeholder="ex: 11"
+							>
+							<p class="description">
+								<?php esc_html_e( 'Encontre em: Brevo → Contatos → Listas. Deixe em branco para não adicionar a nenhuma lista.', 'elementor-pipedrive' ); ?>
+							</p>
+						</td>
+					</tr>
+				</table>
+
+				<hr style="margin:20px 0; border:none; border-top:1px solid #f0f0f1;">
+
+				<h3 style="margin-top:0;"><?php esc_html_e( 'Mapeamento de Campos do Brevo', 'elementor-pipedrive' ); ?></h3>
+				<p class="description" style="margin-bottom:15px;">
+					<?php esc_html_e( 'Mapeie os campos do formulário para os atributos do Brevo. O campo de e-mail é obrigatório (use o atributo: EMAIL).', 'elementor-pipedrive' ); ?>
+				</p>
+
+				<table class="widefat epd-fields-table" id="epd-brevo-fields-table">
+					<thead>
+						<tr>
+							<th style="width:45%"><?php esc_html_e( 'Campo do Elementor', 'elementor-pipedrive' ); ?></th>
+							<th style="width:40%"><?php esc_html_e( 'Atributo Brevo', 'elementor-pipedrive' ); ?></th>
+							<th style="width:15%"></th>
+						</tr>
+					</thead>
+					<tbody id="epd-brevo-fields-body">
+						<?php foreach ( $saved_brevo_field_map as $brevo_row ) : ?>
+						<tr class="epd-brevo-field-row">
+							<td>
+								<select name="brevo_elementor_field[]" class="epd-brevo-elementor-field widefat">
+									<option value="<?php echo esc_attr( $brevo_row['elementor_field'] ); ?>" selected>
+										<?php echo esc_html( $brevo_row['elementor_field'] ); ?>
+									</option>
+								</select>
+							</td>
+							<td>
+								<input
+									type="text"
+									name="brevo_attribute[]"
+									class="widefat"
+									value="<?php echo esc_attr( $brevo_row['brevo_attribute'] ); ?>"
+									placeholder="<?php esc_attr_e( 'ex: EMAIL, FNAME, LNAME, SMS', 'elementor-pipedrive' ); ?>"
+								>
+							</td>
+							<td>
+								<button type="button" class="button button-small epd-remove-brevo-row">
+									<?php esc_html_e( 'Remover', 'elementor-pipedrive' ); ?>
+								</button>
+							</td>
+						</tr>
+						<?php endforeach; ?>
+					</tbody>
+				</table>
+
+				<p style="margin-top:15px;">
+					<button type="button" id="epd-add-brevo-row" class="button">
+						<?php esc_html_e( '+ Adicionar campo', 'elementor-pipedrive' ); ?>
+					</button>
+				</p>
+
+			</div>
+
+			<script>
+			document.getElementById('epd-brevo-toggle').addEventListener('change', function () {
+				document.getElementById('epd-brevo-fields').style.display = this.checked ? '' : 'none';
+			});
+			</script>
+		</div>
+		<?php endif; // fim: $brevo_active ?>
 
 		<p class="submit">
 			<?php submit_button( $is_edit ? __( 'Atualizar Mapeamento', 'elementor-pipedrive' ) : __( 'Salvar Mapeamento', 'elementor-pipedrive' ), 'primary', 'submit', false ); ?>
@@ -359,13 +495,35 @@ $val = $is_edit && ! empty( $mapping->validation_config )
 	</tr>
 </template>
 
+<!-- Template de linha do Brevo -->
+<template id="epd-brevo-row-template">
+	<tr class="epd-brevo-field-row">
+		<td>
+			<select name="brevo_elementor_field[]" class="epd-brevo-elementor-field widefat">
+				<option value=""><?php esc_html_e( '— Campo do formulário —', 'elementor-pipedrive' ); ?></option>
+			</select>
+		</td>
+		<td>
+			<input type="text" name="brevo_attribute[]" class="widefat" placeholder="<?php esc_attr_e( 'ex: EMAIL, FNAME, LNAME, SMS', 'elementor-pipedrive' ); ?>">
+		</td>
+		<td>
+			<button type="button" class="button button-small epd-remove-brevo-row">
+				<?php esc_html_e( 'Remover', 'elementor-pipedrive' ); ?>
+			</button>
+		</td>
+	</tr>
+</template>
+
 <script>
 // Dados iniciais para re-hidratação ao editar
 var epdEditData = {
 	formId:             '<?php echo esc_js( $is_edit ? $mapping->form_id : '' ); ?>',
-	pipelineId:         '<?php echo esc_js( $is_edit ? (string) $mapping->pipeline_id : '' ); ?>',
-	stageId:            '<?php echo esc_js( $is_edit ? (string) $mapping->stage_id : '' ); ?>',
-	savedRows:          <?php echo wp_json_encode( $saved_mappings ); ?>,
-	savedWebhookFields: <?php echo wp_json_encode( $saved_webhook_field_map ); ?>
+	pipelineId:         '<?php echo esc_js( $is_edit && $pipedrive_active ? (string) $mapping->pipeline_id : '' ); ?>',
+	stageId:            '<?php echo esc_js( $is_edit && $pipedrive_active ? (string) $mapping->stage_id : '' ); ?>',
+	savedRows:          <?php echo wp_json_encode( $pipedrive_active ? $saved_mappings : array() ); ?>,
+	savedWebhookFields: <?php echo wp_json_encode( $saved_webhook_field_map ); ?>,
+	savedBrevoFields:   <?php echo wp_json_encode( $saved_brevo_field_map ); ?>,
+	pipedriveActive:    <?php echo $pipedrive_active ? 'true' : 'false'; ?>,
+	brevoActive:        <?php echo $brevo_active ? 'true' : 'false'; ?>
 };
 </script>
