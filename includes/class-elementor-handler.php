@@ -89,9 +89,14 @@ class EPD_Elementor_Handler {
 		if ( ! empty( $mapping->brevo_enabled ) && ! empty( get_option( 'epd_brevo_api_key', '' ) ) ) {
 			$raw_brevo_map   = ! empty( $mapping->brevo_field_map ) ? json_decode( $mapping->brevo_field_map, true ) : array();
 			$brevo_field_map = is_array( $raw_brevo_map ) ? $raw_brevo_map : array();
-			$brevo_http      = $this->send_to_brevo( $submitted, $brevo_field_map, (int) $mapping->brevo_list_id );
-			$this->update_submission_brevo( $submission_id, $brevo_http );
-			$brevo_payload   = array( 'status' => $brevo_http );
+			$brevo_result    = $this->send_to_brevo( $submitted, $brevo_field_map, (int) $mapping->brevo_list_id );
+			$this->update_submission_brevo( $submission_id, $brevo_result );
+			if ( $brevo_result['success'] ) {
+				$brevo_payload = array(
+					'status'     => $brevo_result['code'],
+					'contact_id' => $brevo_result['contact_id'],
+				);
+			}
 		}
 
 		// 3. Webhook — roda por último, recebe dados do Pipedrive e do Brevo.
@@ -248,20 +253,22 @@ class EPD_Elementor_Handler {
 		);
 	}
 
-	private function update_submission_brevo( $submission_id, $result ) {
+	private function update_submission_brevo( $submission_id, array $result ) {
 		if ( ! $submission_id ) {
 			return;
 		}
 
 		global $wpdb;
 
-		$is_success = is_numeric( $result ) && (int) $result >= 200 && (int) $result < 300;
-
 		$wpdb->update(
 			$wpdb->prefix . 'epd_submissions',
 			array(
-				'brevo_status' => $is_success ? 'success' : 'error',
-				'brevo_result' => (string) $result,
+				'brevo_status' => $result['success'] ? 'success' : 'error',
+				'brevo_result' => wp_json_encode( array(
+					'status'     => $result['code'],
+					'contact_id' => $result['contact_id'],
+					'error'      => $result['error'],
+				) ),
 			),
 			array( 'id' => $submission_id ),
 			array( '%s', '%s' ),
@@ -321,27 +328,69 @@ class EPD_Elementor_Handler {
 		$utms        = isset( $stored['utms'] ) ? $stored['utms'] : array();
 		$form_fields = isset( $stored['fields'] ) ? $stored['fields'] : array();
 
-		// Brevo: reacionar antes do webhook para incluir no payload.
-		$brevo_payload   = null;
-		$mapping_for_brevo = $wpdb->get_row(
+		// Brevo: só re-executa se ainda não teve sucesso neste submission.
+		$brevo_payload     = null;
+		$brevo_status_saved = isset( $row->brevo_status ) ? $row->brevo_status : 'skipped';
+		$brevo_result_saved = isset( $row->brevo_result ) ? json_decode( $row->brevo_result, true ) : null;
+
+		if ( $brevo_status_saved === 'success' && is_array( $brevo_result_saved ) ) {
+			// Já tinha sucesso — reutiliza o resultado salvo no payload.
+			$brevo_payload = array(
+				'status'     => isset( $brevo_result_saved['status'] ) ? $brevo_result_saved['status'] : null,
+				'contact_id' => isset( $brevo_result_saved['contact_id'] ) ? $brevo_result_saved['contact_id'] : null,
+			);
+		} else {
+			// Tenta enviar ao Brevo se estiver habilitado no mapeamento.
+			$mapping_for_brevo = $wpdb->get_row(
+				$wpdb->prepare(
+					"SELECT brevo_enabled, brevo_list_id, brevo_field_map FROM {$wpdb->prefix}epd_mappings WHERE form_id = %s AND active = 1 LIMIT 1",
+					$row->form_id
+				)
+			);
+
+			if ( $mapping_for_brevo && ! empty( $mapping_for_brevo->brevo_enabled ) && ! empty( get_option( 'epd_brevo_api_key', '' ) ) ) {
+				$raw_brevo_map   = ! empty( $mapping_for_brevo->brevo_field_map ) ? json_decode( $mapping_for_brevo->brevo_field_map, true ) : array();
+				$brevo_field_map = is_array( $raw_brevo_map ) ? $raw_brevo_map : array();
+				$brevo_send      = $this->send_to_brevo( $form_fields, $brevo_field_map, (int) $mapping_for_brevo->brevo_list_id );
+				$this->update_submission_brevo( (int) $submission_id, $brevo_send );
+				if ( $brevo_send['success'] ) {
+					$brevo_payload = array(
+						'status'     => $brevo_send['code'],
+						'contact_id' => $brevo_send['contact_id'],
+					);
+				}
+			}
+		}
+
+		// Webhook: busca URL atual do mapeamento e dispara com payload completo.
+		$current_mapping = $wpdb->get_row(
 			$wpdb->prepare(
-				"SELECT brevo_enabled, brevo_list_id, brevo_field_map FROM {$wpdb->prefix}epd_mappings WHERE form_id = %s AND active = 1 LIMIT 1",
+				"SELECT webhook_url, webhook_field_map FROM {$wpdb->prefix}epd_mappings WHERE form_id = %s AND active = 1 LIMIT 1",
 				$row->form_id
 			)
 		);
 
-		if ( $mapping_for_brevo && ! empty( $mapping_for_brevo->brevo_enabled ) && ! empty( get_option( 'epd_brevo_api_key', '' ) ) ) {
-			$raw_brevo_map   = ! empty( $mapping_for_brevo->brevo_field_map ) ? json_decode( $mapping_for_brevo->brevo_field_map, true ) : array();
-			$brevo_field_map = is_array( $raw_brevo_map ) ? $raw_brevo_map : array();
-			$brevo_http      = $this->send_to_brevo( $form_fields, $brevo_field_map, (int) $mapping_for_brevo->brevo_list_id );
-			$this->update_submission_brevo( (int) $submission_id, $brevo_http );
-			$brevo_payload   = array( 'status' => $brevo_http );
-		}
+		$webhook_url = $current_mapping && ! empty( $current_mapping->webhook_url )
+			? $current_mapping->webhook_url
+			: $row->webhook_url;
 
-		// Webhook: dispara automaticamente após Pipedrive OK.
-		if ( ! empty( $row->webhook_url ) ) {
-			$wh_field_map   = isset( $stored['webhook_field_map'] ) ? $stored['webhook_field_map'] : array();
-			$webhook_result = $this->fire_webhook( $row->webhook_url, $created, $form_fields, $utms, $wh_field_map, $brevo_payload );
+		if ( ! empty( $webhook_url ) ) {
+			// Atualiza URL no submission se mudou.
+			if ( $webhook_url !== $row->webhook_url ) {
+				$wpdb->update(
+					$wpdb->prefix . 'epd_submissions',
+					array( 'webhook_url' => $webhook_url ),
+					array( 'id' => (int) $submission_id ),
+					array( '%s' ),
+					array( '%d' )
+				);
+			}
+
+			$wh_field_map = $current_mapping && ! empty( $current_mapping->webhook_field_map )
+				? ( json_decode( $current_mapping->webhook_field_map, true ) ?: array() )
+				: ( isset( $stored['webhook_field_map'] ) ? $stored['webhook_field_map'] : array() );
+
+			$webhook_result = $this->fire_webhook( $webhook_url, $created, $form_fields, $utms, $wh_field_map, $brevo_payload );
 			$this->update_submission_webhook( (int) $submission_id, $webhook_result );
 
 			$webhook_ok = is_numeric( $webhook_result ) && (int) $webhook_result >= 200 && (int) $webhook_result < 300;
@@ -415,7 +464,20 @@ class EPD_Elementor_Handler {
 			? ( json_decode( $current_mapping->webhook_field_map, true ) ?: array() )
 			: ( isset( $stored['webhook_field_map'] ) ? $stored['webhook_field_map'] : array() );
 
-		$result = $this->fire_webhook( $webhook_url, $pipedrive_created, $form_fields, $utms, $wh_field_map );
+		// Reconstrói o payload do Brevo a partir do submission — inclui se o Brevo teve sucesso.
+		$brevo_payload      = null;
+		$brevo_status       = isset( $row->brevo_status ) ? $row->brevo_status : 'skipped';
+		$brevo_result_raw   = isset( $row->brevo_result ) ? $row->brevo_result : '';
+		$brevo_result_saved = $brevo_result_raw !== '' ? json_decode( $brevo_result_raw, true ) : null;
+
+		if ( $brevo_status === 'success' && is_array( $brevo_result_saved ) ) {
+			$brevo_payload = array(
+				'status'     => isset( $brevo_result_saved['status'] )     ? $brevo_result_saved['status']     : null,
+				'contact_id' => isset( $brevo_result_saved['contact_id'] ) ? $brevo_result_saved['contact_id'] : null,
+			);
+		}
+
+		$result = $this->fire_webhook( $webhook_url, $pipedrive_created, $form_fields, $utms, $wh_field_map, $brevo_payload );
 		$this->update_submission_webhook( (int) $submission_id, $result );
 
 		$is_success = is_numeric( $result ) && (int) $result >= 200 && (int) $result < 300;
@@ -473,8 +535,7 @@ class EPD_Elementor_Handler {
 		$result = $this->send_to_brevo( $form_fields, $brevo_field_map, (int) $mapping->brevo_list_id );
 		$this->update_submission_brevo( (int) $submission_id, $result );
 
-		$is_success = is_numeric( $result ) && (int) $result >= 200 && (int) $result < 300;
-		return array( 'success' => $is_success, 'http_code' => $result );
+		return array( 'success' => $result['success'], 'http_code' => $result['code'] );
 	}
 
 	// -------------------------------------------------------------------------
@@ -601,14 +662,16 @@ class EPD_Elementor_Handler {
 
 	/**
 	 * Envia um contato ao Brevo com base no mapeamento configurado.
-	 * Retorna o HTTP status code (string) em caso de sucesso, ou mensagem de erro.
+	 *
+	 * Retorna array com:
+	 *   ['success' => bool, 'code' => int, 'contact_id' => int|null, 'error' => string|null]
 	 */
 	private function send_to_brevo( array $submitted, array $brevo_field_map, $list_id ) {
 		$api = new EPD_Brevo_API();
 
 		if ( ! $api->is_configured() ) {
 			$this->log( 'Brevo: API Key não configurada.' );
-			return 'api_not_configured';
+			return array( 'success' => false, 'code' => 0, 'contact_id' => null, 'error' => 'api_not_configured' );
 		}
 
 		$email      = '';
@@ -645,7 +708,7 @@ class EPD_Elementor_Handler {
 
 		if ( empty( $email ) ) {
 			$this->log( 'Brevo: campo de e-mail não encontrado no mapeamento. Contato não criado.' );
-			return 'email_not_mapped';
+			return array( 'success' => false, 'code' => 0, 'contact_id' => null, 'error' => 'email_not_mapped' );
 		}
 
 		$list_ids = $list_id > 0 ? array( $list_id ) : array();
@@ -654,14 +717,16 @@ class EPD_Elementor_Handler {
 		$result = $api->create_contact( $email, $attributes, $list_ids );
 
 		if ( $result['success'] ) {
-			$code = isset( $result['code'] ) ? $result['code'] : 201;
-			$this->log( "Brevo: contato criado/atualizado. HTTP {$code}" );
-			return (string) $code;
+			$code       = isset( $result['code'] ) ? (int) $result['code'] : 201;
+			// 201 = criado (retorna {"id": 123}); 204 = atualizado (sem body).
+			$contact_id = isset( $result['data']['id'] ) ? (int) $result['data']['id'] : null;
+			$this->log( "Brevo: contato criado/atualizado. HTTP {$code}" . ( $contact_id ? " | contact_id: {$contact_id}" : '' ) );
+			return array( 'success' => true, 'code' => $code, 'contact_id' => $contact_id, 'error' => null );
 		}
 
 		$error = isset( $result['error'] ) ? $result['error'] : 'Erro desconhecido';
 		$this->log( "Brevo: erro ao criar contato. {$error}" );
-		return $error;
+		return array( 'success' => false, 'code' => isset( $result['code'] ) ? (int) $result['code'] : 0, 'contact_id' => null, 'error' => $error );
 	}
 
 	/**
