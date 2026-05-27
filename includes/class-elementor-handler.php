@@ -368,8 +368,24 @@ class EPD_Elementor_Handler {
 			)
 		);
 
-		if ( ! $row || empty( $row->webhook_url ) ) {
-			return array( 'success' => false, 'error' => 'Submission não encontrada ou sem webhook configurado.' );
+		if ( ! $row ) {
+			return array( 'success' => false, 'error' => 'Submission não encontrada.' );
+		}
+
+		// Busca a URL atual do mapeamento — pode ter sido alterada desde o envio original.
+		$current_mapping = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT webhook_url, webhook_field_map FROM {$wpdb->prefix}epd_mappings WHERE form_id = %s AND active = 1 LIMIT 1",
+				$row->form_id
+			)
+		);
+
+		$webhook_url = $current_mapping && ! empty( $current_mapping->webhook_url )
+			? $current_mapping->webhook_url
+			: $row->webhook_url;
+
+		if ( empty( $webhook_url ) ) {
+			return array( 'success' => false, 'error' => 'Nenhuma URL de webhook configurada.' );
 		}
 
 		$stored           = json_decode( $row->submitted_data, true );
@@ -383,18 +399,23 @@ class EPD_Elementor_Handler {
 			'organization' => isset( $pipedrive_result['organization'] ) ? $pipedrive_result['organization'] : null,
 		);
 
-		// Marca como pending antes de tentar.
+		// Marca como pending e atualiza a URL caso tenha mudado no mapeamento.
 		$wpdb->update(
 			$wpdb->prefix . 'epd_submissions',
-			array( 'webhook_status' => 'pending', 'webhook_result' => '' ),
+			array( 'webhook_status' => 'pending', 'webhook_result' => '', 'webhook_url' => $webhook_url ),
 			array( 'id' => (int) $submission_id ),
-			array( '%s', '%s' ),
+			array( '%s', '%s', '%s' ),
 			array( '%d' )
 		);
 
-		$form_fields  = isset( $stored['fields'] ) ? $stored['fields'] : array();
-		$wh_field_map = isset( $stored['webhook_field_map'] ) ? $stored['webhook_field_map'] : array();
-		$result = $this->fire_webhook( $row->webhook_url, $pipedrive_created, $form_fields, $utms, $wh_field_map );
+		$form_fields = isset( $stored['fields'] ) ? $stored['fields'] : array();
+
+		// Usa o field map atual do mapeamento se disponível, senão o salvo no submission.
+		$wh_field_map = $current_mapping && ! empty( $current_mapping->webhook_field_map )
+			? ( json_decode( $current_mapping->webhook_field_map, true ) ?: array() )
+			: ( isset( $stored['webhook_field_map'] ) ? $stored['webhook_field_map'] : array() );
+
+		$result = $this->fire_webhook( $webhook_url, $pipedrive_created, $form_fields, $utms, $wh_field_map );
 		$this->update_submission_webhook( (int) $submission_id, $result );
 
 		$is_success = is_numeric( $result ) && (int) $result >= 200 && (int) $result < 300;
@@ -614,6 +635,9 @@ class EPD_Elementor_Handler {
 			// Chave "EMAIL" (case-insensitive) → campo de email do contato.
 			if ( strtoupper( $brevo_key ) === 'EMAIL' ) {
 				$email = $value;
+			} elseif ( in_array( strtoupper( $brevo_key ), array( 'SMS', 'LANDLINE_NUMBER' ), true ) ) {
+				// SMS e LANDLINE_NUMBER exigem formato internacional (+5511999998888).
+				$attributes[ $brevo_key ] = $this->format_brevo_phone( $value );
 			} else {
 				$attributes[ $brevo_key ] = $value;
 			}
@@ -626,7 +650,7 @@ class EPD_Elementor_Handler {
 
 		$list_ids = $list_id > 0 ? array( $list_id ) : array();
 
-		$this->log( "Brevo: enviando contato {$email}" );
+		$this->log( "Brevo: enviando contato {$email} | atributos: " . wp_json_encode( $attributes ) );
 		$result = $api->create_contact( $email, $attributes, $list_ids );
 
 		if ( $result['success'] ) {
@@ -638,6 +662,49 @@ class EPD_Elementor_Handler {
 		$error = isset( $result['error'] ) ? $result['error'] : 'Erro desconhecido';
 		$this->log( "Brevo: erro ao criar contato. {$error}" );
 		return $error;
+	}
+
+	/**
+	 * Formata um número de telefone para o padrão internacional exigido pelo Brevo.
+	 * Ex: (11) 99999-8888 → +5511999998888
+	 *
+	 * Regras:
+	 * - Remove tudo que não for dígito ou "+" inicial.
+	 * - Se já começar com "+", mantém como está.
+	 * - Se tiver 12-13 dígitos e começar com "55", adiciona "+".
+	 * - Se tiver 10-11 dígitos, assume Brasil e adiciona "+55".
+	 * - Outros casos: retorna os dígitos com "+" para não rejeitar silenciosamente.
+	 */
+	private function format_brevo_phone( $value ) {
+		$value = trim( $value );
+
+		// Se já estiver no formato internacional, mantém.
+		if ( strpos( $value, '+' ) === 0 ) {
+			// Remove tudo exceto "+" e dígitos.
+			return '+' . preg_replace( '/\D/', '', substr( $value, 1 ) );
+		}
+
+		// Remove todos os caracteres não numéricos.
+		$digits = preg_replace( '/\D/', '', $value );
+
+		if ( $digits === '' ) {
+			return $value; // valor inválido — retorna original para o Brevo gerar o erro.
+		}
+
+		$len = strlen( $digits );
+
+		// 12-13 dígitos começando com 55 → número brasileiro com código do país.
+		if ( $len >= 12 && $len <= 13 && substr( $digits, 0, 2 ) === '55' ) {
+			return '+' . $digits;
+		}
+
+		// 10-11 dígitos → número brasileiro sem código do país, adiciona +55.
+		if ( $len >= 10 && $len <= 11 ) {
+			return '+55' . $digits;
+		}
+
+		// Outros comprimentos → adiciona "+" e envia como está.
+		return '+' . $digits;
 	}
 
 	// -------------------------------------------------------------------------
