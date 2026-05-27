@@ -93,9 +93,9 @@ $val = $is_edit && ! empty( $mapping->validation_config )
 		<?php endif; ?>
 
 		<?php if ( $pipedrive_active ) : ?>
-		<!-- Pipeline & Stage -->
+		<!-- Pipedrive -->
 		<div class="epd-card">
-			<h2><?php esc_html_e( 'Pipeline e Etapa', 'elementor-pipedrive' ); ?></h2>
+			<h2><?php esc_html_e( 'Pipedrive', 'elementor-pipedrive' ); ?></h2>
 
 			<table class="form-table">
 				<tr>
@@ -132,11 +132,10 @@ $val = $is_edit && ! empty( $mapping->validation_config )
 					</td>
 				</tr>
 			</table>
-		</div>
 
-		<!-- Mapeamento de Campos Pipedrive -->
-		<div class="epd-card">
-			<h2><?php esc_html_e( 'Mapeamento de Campos do Pipedrive', 'elementor-pipedrive' ); ?></h2>
+			<hr style="margin:20px 0; border:none; border-top:1px solid #f0f0f1;">
+
+			<h3 style="margin-top:0;"><?php esc_html_e( 'Mapeamento de Campos do Pipedrive', 'elementor-pipedrive' ); ?></h3>
 			<p class="description" style="margin-bottom:15px;">
 				<?php esc_html_e( 'Relacione cada campo do formulário Elementor com o campo correspondente no Pipedrive. Nem todos os campos precisam ser mapeados.', 'elementor-pipedrive' ); ?>
 			</p>
