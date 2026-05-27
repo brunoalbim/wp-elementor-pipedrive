@@ -34,7 +34,7 @@ $logs = $wpdb->get_results(
 			<table class="widefat fixed striped epd-table">
 				<thead>
 					<tr>
-						<th style="width:160px;"><?php esc_html_e( 'Data/Hora (UTC)', 'elementor-pipedrive' ); ?></th>
+						<th style="width:160px;"><?php esc_html_e( 'Data/Hora', 'elementor-pipedrive' ); ?></th>
 						<th><?php esc_html_e( 'Mensagem', 'elementor-pipedrive' ); ?></th>
 					</tr>
 				</thead>

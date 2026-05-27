@@ -961,7 +961,7 @@ class EPD_Elementor_Handler {
 		if ( $wpdb->get_var( "SHOW TABLES LIKE '{$table}'" ) === $table ) {
 			$wpdb->insert(
 				$table,
-				array( 'message' => $message, 'created_at' => current_time( 'mysql', true ) ),
+				array( 'message' => $message, 'created_at' => current_time( 'mysql' ) ),
 				array( '%s', '%s' )
 			);
 		}
