@@ -47,6 +47,29 @@
 					$btn.prop('disabled', false).text('Testar Conexão');
 				});
 			});
+
+			$(document).on('click', '#epd-test-brevo-connection', function () {
+				var $btn    = $(this);
+				var $result = $('#epd-brevo-connection-result');
+
+				$btn.prop('disabled', true).text(epdData.i18n.loading);
+				$result.removeClass('success error').text('');
+
+				$.post(epdData.ajaxUrl, {
+					action: 'epd_test_brevo_connection',
+					nonce: epdData.nonce,
+				}, function (response) {
+					if (response.success) {
+						$result.addClass('success').text(epdData.i18n.connectionOk + ' ' + response.data.message);
+					} else {
+						$result.addClass('error').text(epdData.i18n.connectionFail + response.data);
+					}
+				}).fail(function () {
+					$result.addClass('error').text(epdData.i18n.connectionFail + 'Erro de rede.');
+				}).always(function () {
+					$btn.prop('disabled', false).text('Testar Conexão');
+				});
+			});
 		},
 
 		// -------------------------------------------------------------------------

@@ -21,6 +21,15 @@ class EPD_Brevo_API {
 	}
 
 	/**
+	 * Testa a conexão com a API do Brevo.
+	 *
+	 * @return array ['success' => bool, 'data' => array|null, 'error' => string|null, 'code' => int]
+	 */
+	public function test_connection() {
+		return $this->request( 'GET', '/account' );
+	}
+
+	/**
 	 * Cria ou atualiza um contato no Brevo.
 	 *
 	 * @param string $email       E-mail do contato (obrigatório).
@@ -78,8 +87,8 @@ class EPD_Brevo_API {
 		$body = wp_remote_retrieve_body( $response );
 		$data = ! empty( $body ) ? json_decode( $body, true ) : null;
 
-		// 201 = contato criado; 204 = contato atualizado (sem body).
-		if ( $code === 201 || $code === 204 ) {
+		// 2xx = sucesso (200 = OK, 201 = criado, 204 = atualizado sem body).
+		if ( $code >= 200 && $code < 300 ) {
 			return array(
 				'success' => true,
 				'data'    => $data,

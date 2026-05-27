@@ -94,6 +94,13 @@
 					</td>
 				</tr>
 			</table>
+
+			<div style="padding:12px 0 4px;">
+				<button type="button" id="epd-test-brevo-connection" class="button button-secondary">
+					<?php esc_html_e( 'Testar Conexão', 'elementor-pipedrive' ); ?>
+				</button>
+				<span id="epd-brevo-connection-result" style="margin-left:10px; vertical-align:middle;"></span>
+			</div>
 		</div>
 
 		<p class="submit">

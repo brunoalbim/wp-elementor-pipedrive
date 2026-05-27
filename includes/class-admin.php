@@ -25,6 +25,7 @@ class EPD_Admin {
 		add_action( 'wp_ajax_epd_retry_pipedrive', array( $this, 'ajax_retry_pipedrive' ) );
 		add_action( 'wp_ajax_epd_retry_webhook', array( $this, 'ajax_retry_webhook' ) );
 		add_action( 'wp_ajax_epd_retry_brevo', array( $this, 'ajax_retry_brevo' ) );
+		add_action( 'wp_ajax_epd_test_brevo_connection', array( $this, 'ajax_test_brevo_connection' ) );
 	}
 
 	// -------------------------------------------------------------------------
@@ -404,6 +405,22 @@ class EPD_Admin {
 		if ( $result['success'] ) {
 			$name = isset( $result['data']['data']['name'] ) ? $result['data']['data']['name'] : '';
 			wp_send_json_success( array( 'message' => "Conectado como: {$name}" ) );
+		} else {
+			wp_send_json_error( $result['error'] );
+		}
+	}
+
+	public function ajax_test_brevo_connection() {
+		$this->verify_ajax_nonce();
+
+		$api    = new EPD_Brevo_API();
+		$result = $api->test_connection();
+
+		if ( $result['success'] ) {
+			$company = isset( $result['data']['companyName'] ) ? $result['data']['companyName'] : '';
+			$email   = isset( $result['data']['email'] )       ? $result['data']['email']       : '';
+			$label   = $company ? "{$company} ({$email})" : $email;
+			wp_send_json_success( array( 'message' => "Conectado: {$label}" ) );
 		} else {
 			wp_send_json_error( $result['error'] );
 		}
