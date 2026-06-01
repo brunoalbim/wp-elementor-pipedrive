@@ -36,13 +36,16 @@
 	// -------------------------------------------------------------------------
 
 	function parseUtmsFromUrl() {
-		var params = new URLSearchParams(window.location.search);
+		var search = window.location.search.slice(1);
 		var utms   = {};
 		var found  = false;
 
-		UTM_KEYS.forEach(function (key) {
-			var val = params.get(key);
-			if (val) {
+		search.split('&').forEach(function (pair) {
+			var idx = pair.indexOf('=');
+			if (idx === -1) { return; }
+			var key = decodeURIComponent(pair.slice(0, idx));
+			var val = decodeURIComponent(pair.slice(idx + 1));
+			if (UTM_KEYS.indexOf(key) !== -1 && val) {
 				utms[key] = val;
 				found = true;
 			}
