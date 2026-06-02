@@ -99,6 +99,7 @@ $submissions = $this->get_submissions( 100 );
 								<ul style="margin:6px 0 12px 16px;">
 									<?php foreach ( $stored_data['fields'] as $k => $v ) :
 										if ( strpos( $k, 'epd_utm' ) === 0 ) continue;
+										if ( strpos( $k, 'epd_page_' ) === 0 ) continue;
 									?>
 										<li><code><?php echo esc_html( $k ); ?></code>: <?php echo esc_html( $v ); ?></li>
 									<?php endforeach; ?>
@@ -107,8 +108,17 @@ $submissions = $this->get_submissions( 100 );
 
 							<?php if ( ! empty( $stored_data['utms'] ) ) : ?>
 								<strong><?php esc_html_e( 'UTMs:', 'elementor-pipedrive' ); ?></strong>
-								<ul style="margin:6px 0 0 16px;">
+								<ul style="margin:6px 0 12px 16px;">
 									<?php foreach ( $stored_data['utms'] as $k => $v ) : ?>
+										<li><code><?php echo esc_html( $k ); ?></code>: <?php echo esc_html( $v ); ?></li>
+									<?php endforeach; ?>
+								</ul>
+							<?php endif; ?>
+
+							<?php if ( ! empty( $stored_data['page_data'] ) ) : ?>
+								<strong><?php esc_html_e( 'Dados da Página:', 'elementor-pipedrive' ); ?></strong>
+								<ul style="margin:6px 0 0 16px;">
+									<?php foreach ( $stored_data['page_data'] as $k => $v ) : ?>
 										<li><code><?php echo esc_html( $k ); ?></code>: <?php echo esc_html( $v ); ?></li>
 									<?php endforeach; ?>
 								</ul>
