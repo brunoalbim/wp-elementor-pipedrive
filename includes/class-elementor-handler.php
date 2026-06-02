@@ -47,6 +47,11 @@ class EPD_Elementor_Handler {
 			$submitted[ 'epd_' . $key ] = $value;
 		}
 
+		$page_data = $this->extract_page_data( $record );
+		foreach ( $page_data as $key => $value ) {
+			$submitted[ 'epd_page_' . $key ] = $value;
+		}
+
 		// Persiste o submission com todos os dados necessários para retentativa.
 		$raw_wh_map   = ! empty( $mapping->webhook_field_map ) ? json_decode( $mapping->webhook_field_map, true ) : array();
 		$wh_field_map = is_array( $raw_wh_map ) ? $raw_wh_map : array();
@@ -56,6 +61,7 @@ class EPD_Elementor_Handler {
 			$mapping->form_name,
 			$submitted,
 			$utms,
+			$page_data,
 			$saved_mappings,
 			$mapping,
 			$mapping->webhook_url,
@@ -106,6 +112,7 @@ class EPD_Elementor_Handler {
 				$created,
 				$submitted,
 				$utms,
+				$page_data,
 				$wh_field_map,
 				$brevo_payload
 			);
@@ -145,12 +152,13 @@ class EPD_Elementor_Handler {
 	// Submission persistence
 	// -------------------------------------------------------------------------
 
-	private function create_submission( $form_id, $form_name, $submitted, $utms, $saved_mappings, $mapping, $webhook_url, $webhook_field_map = array() ) {
+	private function create_submission( $form_id, $form_name, $submitted, $utms, $page_data, $saved_mappings, $mapping, $webhook_url, $webhook_field_map = array() ) {
 		global $wpdb;
 
 		$submitted_data = wp_json_encode( array(
 			'fields'           => $submitted,
 			'utms'             => $utms,
+			'page_data'        => $page_data,
 			'webhook_field_map'=> $webhook_field_map,
 			'mapping'          => array(
 				'pipeline_id' => $mapping->pipeline_id,
@@ -326,6 +334,7 @@ class EPD_Elementor_Handler {
 		}
 
 		$utms        = isset( $stored['utms'] ) ? $stored['utms'] : array();
+		$page_data   = isset( $stored['page_data'] ) ? $stored['page_data'] : array();
 		$form_fields = isset( $stored['fields'] ) ? $stored['fields'] : array();
 
 		// Brevo: só re-executa se ainda não teve sucesso neste submission.
@@ -390,7 +399,7 @@ class EPD_Elementor_Handler {
 				? ( json_decode( $current_mapping->webhook_field_map, true ) ?: array() )
 				: ( isset( $stored['webhook_field_map'] ) ? $stored['webhook_field_map'] : array() );
 
-			$webhook_result = $this->fire_webhook( $webhook_url, $created, $form_fields, $utms, $wh_field_map, $brevo_payload );
+			$webhook_result = $this->fire_webhook( $webhook_url, $created, $form_fields, $utms, $page_data, $wh_field_map, $brevo_payload );
 			$this->update_submission_webhook( (int) $submission_id, $webhook_result );
 
 			$webhook_ok = is_numeric( $webhook_result ) && (int) $webhook_result >= 200 && (int) $webhook_result < 300;
@@ -439,6 +448,7 @@ class EPD_Elementor_Handler {
 
 		$stored           = json_decode( $row->submitted_data, true );
 		$utms             = isset( $stored['utms'] ) ? $stored['utms'] : array();
+		$page_data        = isset( $stored['page_data'] ) ? $stored['page_data'] : array();
 		$pipedrive_result = $row->pipedrive_result ? json_decode( $row->pipedrive_result, true ) : array();
 
 		// Reconstrói os objetos completos salvos no momento do envio original.
@@ -477,7 +487,7 @@ class EPD_Elementor_Handler {
 			);
 		}
 
-		$result = $this->fire_webhook( $webhook_url, $pipedrive_created, $form_fields, $utms, $wh_field_map, $brevo_payload );
+		$result = $this->fire_webhook( $webhook_url, $pipedrive_created, $form_fields, $utms, $page_data, $wh_field_map, $brevo_payload );
 		$this->update_submission_webhook( (int) $submission_id, $result );
 
 		$is_success = is_numeric( $result ) && (int) $result >= 200 && (int) $result < 300;
@@ -656,6 +666,24 @@ class EPD_Elementor_Handler {
 		return $utms;
 	}
 
+	private function extract_page_data( $record ) {
+		$queried_id = get_queried_object_id();
+		$raw_url    = $queried_id ? get_permalink( $queried_id ) : home_url( isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : '/' );
+		$page_url   = esc_url_raw( strtok( (string) $raw_url, '?' ) );
+		$page_title = $queried_id ? sanitize_text_field( get_the_title( $queried_id ) ) : '';
+
+		$form_name = $record->get_form_settings( 'form_name' );
+		if ( empty( $form_name ) ) {
+			$form_name = $record->get_form_settings( 'name' );
+		}
+
+		return array(
+			'page_url'   => $page_url,
+			'page_title' => $page_title,
+			'form_name'  => sanitize_text_field( (string) $form_name ),
+		);
+	}
+
 	// -------------------------------------------------------------------------
 	// Brevo
 	// -------------------------------------------------------------------------
@@ -783,10 +811,11 @@ class EPD_Elementor_Handler {
 	 * @param array      $created          Entidades criadas no Pipedrive.
 	 * @param array      $form_fields      Campos do formulário.
 	 * @param array      $utms             Parâmetros UTM.
+	 * @param array      $page_data        Dados de contexto da página.
 	 * @param array      $webhook_field_map Mapeamento de renomeação de campos.
 	 * @param array|null $brevo_result     Resultado do Brevo (null se desabilitado).
 	 */
-	private function fire_webhook( $url, array $created, array $form_fields = array(), array $utms = array(), array $webhook_field_map = array(), $brevo_result = null ) {
+	private function fire_webhook( $url, array $created, array $form_fields = array(), array $utms = array(), array $page_data = array(), array $webhook_field_map = array(), $brevo_result = null ) {
 		// Remove campos internos de UTM dos campos do formulário antes de enviar.
 		$clean_fields = array();
 		foreach ( $form_fields as $key => $value ) {
@@ -815,6 +844,9 @@ class EPD_Elementor_Handler {
 		$form_data = $clean_fields;
 		if ( ! empty( $utms ) ) {
 			$form_data['utm'] = $utms;
+		}
+		if ( ! empty( $page_data ) ) {
+			$form_data['page'] = $page_data;
 		}
 
 		$payload = array(

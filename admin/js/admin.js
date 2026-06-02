@@ -323,14 +323,20 @@
 		refreshElementorFieldSelects: function () {
 			var self = this;
 			var fields = self._formFields;
+			// UTMs e dados de página são enviados automaticamente no webhook — não precisam de mapeamento.
+			var webhookFields = fields.filter(function (f) {
+				return f.type !== 'utm' && f.type !== 'page_data';
+			});
 
 			$('.epd-elementor-field, .epd-wh-elementor-field, .epd-brevo-elementor-field').each(function () {
 				var $select = $(this);
 				var currentVal = $select.val();
+				var isWebhook = $select.hasClass('epd-wh-elementor-field');
+				var list = isWebhook ? webhookFields : fields;
 
 				$select.empty().append('<option value="">' + epdData.i18n.selectField + '</option>');
 
-				fields.forEach(function (field) {
+				list.forEach(function (field) {
 					var selected = (field.id === currentVal) ? ' selected' : '';
 					$select.append('<option value="' + self.esc(field.id) + '"' + selected + '>' + self.esc(field.label) + ' (' + self.esc(field.id) + ')' + '</option>');
 				});
@@ -369,7 +375,10 @@
 			var $efSelect = $newRow.find('.epd-wh-elementor-field');
 			$efSelect.empty().append('<option value="">' + epdData.i18n.selectField + '</option>');
 
-			self._formFields.forEach(function (field) {
+			var webhookFields = self._formFields.filter(function (f) {
+				return f.type !== 'utm' && f.type !== 'page_data';
+			});
+			webhookFields.forEach(function (field) {
 				$efSelect.append('<option value="' + self.esc(field.id) + '">' + self.esc(field.label) + ' (' + self.esc(field.id) + ')' + '</option>');
 			});
 		},

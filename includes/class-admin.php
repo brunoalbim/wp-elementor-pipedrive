@@ -652,6 +652,11 @@ class EPD_Admin {
 						$fields[] = $utm_field;
 					}
 
+					// Adiciona dados de página capturados automaticamente pelo backend.
+					foreach ( $this->get_page_data_fields() as $page_field ) {
+						$fields[] = $page_field;
+					}
+
 					$forms[] = array(
 						'id'     => $form_id,
 						'name'   => $form_name,
@@ -677,6 +682,18 @@ class EPD_Admin {
 			array( 'id' => 'epd_utm_campaign', 'label' => '📍 UTM Campaign', 'type' => 'utm' ),
 			array( 'id' => 'epd_utm_term',     'label' => '📍 UTM Term',     'type' => 'utm' ),
 			array( 'id' => 'epd_utm_content',  'label' => '📍 UTM Content',  'type' => 'utm' ),
+		);
+	}
+
+	/**
+	 * Retorna os campos de contexto de página capturados automaticamente pelo backend.
+	 * Sempre disponíveis para mapeamento em qualquer formulário.
+	 */
+	public function get_page_data_fields() {
+		return array(
+			array( 'id' => 'epd_page_page_url',   'label' => '🌐 URL da Página',       'type' => 'page_data' ),
+			array( 'id' => 'epd_page_page_title',  'label' => '📄 Título da Página',    'type' => 'page_data' ),
+			array( 'id' => 'epd_page_form_name',   'label' => '📋 Nome do Formulário',  'type' => 'page_data' ),
 		);
 	}
 
