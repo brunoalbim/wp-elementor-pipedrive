@@ -1,0 +1,1 @@
+git archive --format=zip --prefix=wp-elementor-pipedrive/ HEAD -o wp-elementor-pipedrive.zip
