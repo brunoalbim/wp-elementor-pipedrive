@@ -1,4 +1,5 @@
 .DS_Store
 .env
 reference/
+credentials.php
 wp-elementor-pipedrive.zip
