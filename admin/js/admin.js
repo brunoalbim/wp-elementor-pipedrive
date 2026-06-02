@@ -542,7 +542,10 @@
 
 					var $efSelect = $row.find('.epd-wh-elementor-field');
 					$efSelect.empty().append('<option value="">' + epdData.i18n.selectField + '</option>');
-					self._formFields.forEach(function (field) {
+					var webhookFieldsInit = self._formFields.filter(function (f) {
+						return f.type !== 'utm' && f.type !== 'page_data';
+					});
+					webhookFieldsInit.forEach(function (field) {
 						var selected = (field.id === saved.elementor_field) ? ' selected' : '';
 						$efSelect.append('<option value="' + self.esc(field.id) + '"' + selected + '>' + self.esc(field.label) + ' (' + self.esc(field.id) + ')' + '</option>');
 					});

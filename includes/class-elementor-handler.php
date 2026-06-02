@@ -667,10 +667,11 @@ class EPD_Elementor_Handler {
 	}
 
 	private function extract_page_data( $record ) {
-		$queried_id = get_queried_object_id();
-		$raw_url    = $queried_id ? get_permalink( $queried_id ) : home_url( isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : '/' );
-		$page_url   = esc_url_raw( strtok( (string) $raw_url, '?' ) );
-		$page_title = $queried_id ? sanitize_text_field( get_the_title( $queried_id ) ) : '';
+		// O Elementor Pro envia o post_id da página no POST — único dado confiável em contexto AJAX.
+		$post_id    = ! empty( $_POST['post_id'] ) ? (int) $_POST['post_id'] : 0;
+		$raw_url    = $post_id ? get_permalink( $post_id ) : '';
+		$page_url   = $raw_url ? esc_url_raw( strtok( (string) $raw_url, '?' ) ) : '';
+		$page_title = $post_id ? sanitize_text_field( get_the_title( $post_id ) ) : '';
 
 		$form_name = $record->get_form_settings( 'form_name' );
 		if ( empty( $form_name ) ) {
@@ -816,10 +817,10 @@ class EPD_Elementor_Handler {
 	 * @param array|null $brevo_result     Resultado do Brevo (null se desabilitado).
 	 */
 	private function fire_webhook( $url, array $created, array $form_fields = array(), array $utms = array(), array $page_data = array(), array $webhook_field_map = array(), $brevo_result = null ) {
-		// Remove campos internos de UTM dos campos do formulário antes de enviar.
+		// Remove campos internos (UTM e dados de página) — esses vão em chaves próprias no payload.
 		$clean_fields = array();
 		foreach ( $form_fields as $key => $value ) {
-			if ( strpos( $key, 'epd_utm' ) !== 0 ) {
+			if ( strpos( $key, 'epd_utm' ) !== 0 && strpos( $key, 'epd_page_' ) !== 0 ) {
 				$clean_fields[ $key ] = $value;
 			}
 		}
