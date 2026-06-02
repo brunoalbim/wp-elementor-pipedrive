@@ -4,6 +4,14 @@ WordPress plugin that captures Elementor Pro form submissions and creates Person
 
 ---
 
+## Development Rule
+
+> **Every modification to any file in this plugin must include a version bump** in both places inside `wp-elementor-pipedrive.php`:
+> - Header comment: `Version: X.Y.Z`
+> - Constant: `define( 'EPD_VERSION', 'X.Y.Z' );`
+
+---
+
 ## Requirements
 
 - WordPress 5.0+
