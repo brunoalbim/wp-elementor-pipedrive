@@ -69,7 +69,23 @@
 	// Inject hidden fields into an Elementor form element
 	// -------------------------------------------------------------------------
 
-	function injectIntoForm(form, utms) {
+	function injectPageDataIntoForm(form) {
+		var pageFields = [
+			{ id: 'epd-page-url',   name: 'epd_page[page_url]',   value: window.location.href.split('?')[0] },
+			{ id: 'epd-page-title', name: 'epd_page[page_title]', value: document.title },
+		];
+		pageFields.forEach(function (f) {
+			if (form.querySelector('#' + f.id)) { return; }
+			var input   = document.createElement('input');
+			input.type  = 'hidden';
+			input.id    = f.id;
+			input.name  = f.name;
+			input.value = f.value;
+			form.appendChild(input);
+		});
+	}
+
+	function injectUtmsIntoForm(form, utms) {
 		UTM_KEYS.forEach(function (key) {
 			var existingId = 'epd-' + key;
 
@@ -83,6 +99,13 @@
 			input.value  = utms[key] || '';
 			form.appendChild(input);
 		});
+	}
+
+	function injectIntoForm(form, utms) {
+		injectPageDataIntoForm(form);
+		if (utms) {
+			injectUtmsIntoForm(form, utms);
+		}
 	}
 
 	function injectIntoAllForms(utms) {
@@ -138,9 +161,8 @@
 		// 2. Resolve os UTMs a usar: URL tem prioridade, senão usa o cookie.
 		var utms = fromUrl || loadUtmsFromCookie();
 
-		if (!utms) { return; } // Nenhum UTM disponível, nada a fazer.
-
 		// 3. Injeta nos forms já presentes no DOM.
+		// Dados de página são sempre injetados; UTMs apenas se disponíveis.
 		if (document.readyState === 'loading') {
 			document.addEventListener('DOMContentLoaded', function () {
 				injectIntoAllForms(utms);
