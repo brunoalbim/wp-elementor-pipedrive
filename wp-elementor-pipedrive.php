@@ -3,7 +3,7 @@
  * Plugin Name: Elementor Pipedrive Integration
  * Plugin URI:  https://bruno.art.br
  * Description: Captura dados de formulários Elementor Pro e cria Pessoa, Empresa e Negociação no Pipedrive.
- * Version:     1.9.5
+ * Version:     1.10.0
  * Author:      Bruno Albim
  * Author URI:  https://bruno.art.br
  * License:     GPL-2.0+
