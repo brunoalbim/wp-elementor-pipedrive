@@ -42,9 +42,13 @@ class EPD_Elementor_Handler {
 			return;
 		}
 
-		$utms = $this->extract_utms();
+		$attribution = EPD_Attribution::from_request();
+		$utms        = EPD_Attribution::utms( $attribution );
 		foreach ( $utms as $key => $value ) {
 			$submitted[ 'epd_' . $key ] = $value;
+		}
+		foreach ( EPD_Attribution::flatten( $attribution ) as $key => $value ) {
+			$submitted[ $key ] = $value;
 		}
 
 		$page_data = $this->extract_page_data( $record );
@@ -61,6 +65,7 @@ class EPD_Elementor_Handler {
 			$mapping->form_name,
 			$submitted,
 			$utms,
+			$attribution,
 			$page_data,
 			$saved_mappings,
 			$mapping,
@@ -152,12 +157,13 @@ class EPD_Elementor_Handler {
 	// Submission persistence
 	// -------------------------------------------------------------------------
 
-	private function create_submission( $form_id, $form_name, $submitted, $utms, $page_data, $saved_mappings, $mapping, $webhook_url, $webhook_field_map = array() ) {
+	private function create_submission( $form_id, $form_name, $submitted, $utms, $attribution, $page_data, $saved_mappings, $mapping, $webhook_url, $webhook_field_map = array() ) {
 		global $wpdb;
 
 		$submitted_data = wp_json_encode( array(
 			'fields'           => $submitted,
 			'utms'             => $utms,
+			'attribution'      => $attribution,
 			'page_data'        => $page_data,
 			'webhook_field_map'=> $webhook_field_map,
 			'mapping'          => array(
@@ -629,42 +635,8 @@ class EPD_Elementor_Handler {
 	}
 
 	// -------------------------------------------------------------------------
-	// UTMs
+	// Atribuição e dados de página
 	// -------------------------------------------------------------------------
-
-	private function extract_utms() {
-		$keys        = array( 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content' );
-		$utms        = array();
-		$post_utms   = isset( $_POST['epd_utm'] ) && is_array( $_POST['epd_utm'] ) ? $_POST['epd_utm'] : array();
-		$cookie_utms = array();
-
-		if ( ! empty( $_COOKIE['epd_utm'] ) ) {
-			$decoded = json_decode( stripslashes( $_COOKIE['epd_utm'] ), true );
-			if ( is_array( $decoded ) ) {
-				$cookie_utms = $decoded;
-			}
-		}
-
-		foreach ( $keys as $key ) {
-			$value = '';
-
-			if ( ! empty( $post_utms[ $key ] ) ) {
-				$value = sanitize_text_field( $post_utms[ $key ] );
-			} elseif ( ! empty( $cookie_utms[ $key ] ) ) {
-				$value = sanitize_text_field( $cookie_utms[ $key ] );
-			}
-
-			if ( $value !== '' ) {
-				$utms[ $key ] = $value;
-			}
-		}
-
-		if ( ! empty( $utms ) ) {
-			$this->log( 'UTMs capturados: ' . wp_json_encode( $utms ) );
-		}
-
-		return $utms;
-	}
 
 	private function extract_page_data( $record ) {
 		// page_url e page_title são injetados como campos hidden pelo epd-utm.js,
@@ -824,10 +796,10 @@ class EPD_Elementor_Handler {
 	 * @param array|null $brevo_result     Resultado do Brevo (null se desabilitado).
 	 */
 	private function fire_webhook( $url, array $created, array $form_fields = array(), array $utms = array(), array $page_data = array(), array $webhook_field_map = array(), $brevo_result = null ) {
-		// Remove campos internos (UTM e dados de página) — esses vão em chaves próprias no payload.
+		// Remove campos internos — esses dados vão em chaves próprias no payload.
 		$clean_fields = array();
 		foreach ( $form_fields as $key => $value ) {
-			if ( strpos( $key, 'epd_utm' ) !== 0 && strpos( $key, 'epd_page_' ) !== 0 ) {
+			if ( strpos( $key, 'epd_utm' ) !== 0 && strpos( $key, 'epd_page_' ) !== 0 && strpos( $key, 'epd_attribution_' ) !== 0 ) {
 				$clean_fields[ $key ] = $value;
 			}
 		}
@@ -849,10 +821,14 @@ class EPD_Elementor_Handler {
 			$clean_fields = $mapped_fields;
 		}
 
-		$form_data = $clean_fields;
-		if ( ! empty( $utms ) ) {
-			$form_data['utm'] = $utms;
-		}
+		$form_data        = $clean_fields;
+		$form_data['utm'] = array(
+			'utm_source'   => isset( $utms['utm_source'] ) ? sanitize_text_field( $utms['utm_source'] ) : '',
+			'utm_medium'   => isset( $utms['utm_medium'] ) ? sanitize_text_field( $utms['utm_medium'] ) : '',
+			'utm_campaign' => isset( $utms['utm_campaign'] ) ? sanitize_text_field( $utms['utm_campaign'] ) : '',
+			'utm_term'     => isset( $utms['utm_term'] ) ? sanitize_text_field( $utms['utm_term'] ) : '',
+			'utm_content'  => isset( $utms['utm_content'] ) ? sanitize_text_field( $utms['utm_content'] ) : '',
+		);
 		if ( ! empty( $page_data ) ) {
 			$form_data['page'] = $page_data;
 		}

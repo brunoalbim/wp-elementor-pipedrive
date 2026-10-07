@@ -31,6 +31,7 @@ wp-elementor-pipedrive/
 │   ├── class-activator.php             # DB table creation and schema migrations
 │   ├── class-admin.php                 # Admin pages, form handlers, AJAX endpoints
 │   ├── class-elementor-handler.php     # Submission orchestrator (Pipedrive → Brevo → Webhook)
+│   ├── class-attribution.php            # Validates and normalizes browser attribution data
 │   ├── class-field-mapper.php          # Maps Elementor fields to Pipedrive entities
 │   ├── class-pipedrive-api.php         # Pipedrive REST API wrapper (v1 + v2)
 │   └── class-brevo-api.php             # Brevo REST API wrapper (v3)
@@ -45,9 +46,12 @@ wp-elementor-pipedrive/
 │       └── logs-page.php               # Last 200 log entries
 ├── public/
 │   └── js/
-│       ├── epd-utm.js                  # Captures UTM params and injects into forms
+│       ├── epd-attribution-classifier.js # Classifies UTMs, click IDs, referrers, and direct traffic
+│       ├── epd-utm.js                  # Persists first/last touch and injects attribution into forms
 │       └── epd-form-validation.js      # Phone mask + email domain blocking (client-side)
-└── languages/                          # i18n files (text domain: elementor-pipedrive)
+├── languages/                          # i18n files (text domain: elementor-pipedrive)
+└── tests/
+    └── attribution-classifier.test.js  # Classifier unit tests
 ```
 
 ---
@@ -71,6 +75,7 @@ Tables are created on plugin activation via `EPD_Activator::activate()`. Schema 
 | `EPD_Activator` | `includes/class-activator.php` | Creates/upgrades DB tables; handles backward-compatible migrations |
 | `EPD_Admin` | `includes/class-admin.php` | Registers admin menu, handles form POSTs and 9 AJAX endpoints |
 | `EPD_Elementor_Handler` | `includes/class-elementor-handler.php` | Hooks into `elementor_pro/forms/new_record`, runs the full integration pipeline |
+| `EPD_Attribution` | `includes/class-attribution.php` | Validates the attribution carrier and exposes backward-compatible UTM fields |
 | `EPD_Field_Mapper` | `includes/class-field-mapper.php` | Transforms form fields into `{person, organization, deal}` payloads for Pipedrive |
 | `EPD_Pipedrive_API` | `includes/class-pipedrive-api.php` | HTTP wrapper for Pipedrive (v1 for reads, v2 for creates) |
 | `EPD_Brevo_API` | `includes/class-brevo-api.php` | HTTP wrapper for Brevo API v3 — contact upsert with `updateEnabled: true` |
@@ -83,7 +88,7 @@ When an Elementor Pro form is submitted:
 
 1. `elementor_pro/forms/new_record` fires → `EPD_Elementor_Handler::handle_form_submit()`
 2. Look up active mapping for the `form_id` in `wp_epd_mappings`
-3. Normalize form fields; extract UTM parameters from `$_POST['epd_utm']` or cookie
+3. Normalize form fields; validate the attribution carrier and fall back to the legacy `epd_utm` format
 4. Create a `wp_epd_submissions` row with status `pending`
 5. **Pipedrive** (if API token + domain configured):
    - Map fields via `EPD_Field_Mapper::map()`
@@ -97,7 +102,8 @@ When an Elementor Pro form is submitted:
    - `POST /contacts` (upsert)
    - Update submission with contact ID and status
 7. **Webhook** (if `webhook_url` set in mapping):
-   - Build JSON payload: `{source, form, pipedrive, brevo, utm}`
+   - Build the JSON payload without changing the existing contract
+   - Send explicit or inferred values in the existing `form.utm` object
    - Apply field renaming from `webhook_field_map`
    - `POST` to URL (15s timeout, 3 redirects max)
    - Update submission with HTTP status code
@@ -130,16 +136,28 @@ Failed submissions can be retried individually from the Submissions admin page.
 - **Timeout:** 15 seconds, max 3 redirects
 - **Scope:** Configured per-form mapping
 - **Field renaming:** `webhook_field_map` lets you rename keys before sending
-- Internal `epd_utm*` fields are stripped from the payload
+- **Compatibility contract:** `form.utm` always keeps `utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, and `utm_content`
+- Explicit UTMs take priority; missing values are inferred from click IDs or the external referrer
+- Internal `epd_utm*` and `epd_attribution_*` fields are stripped from the regular `form` fields
 
 ---
 
 ## Frontend Scripts
 
 ### `epd-utm.js`
-- On page load: reads UTM params from query string, saves to cookie `epd_utm` (30 days)
-- Injects hidden inputs (`epd_utm[utm_source]`, etc.) into all `form.elementor-form` elements
+- Classifies explicit UTMs, Google/Bing/Meta/TikTok click IDs, organic search, social, referral, and direct traffic
+- Saves first touch and last non-direct touch for 90 days without renewing the original attribution window on every navigation
+- Migrates the legacy `epd_utm` cookie and keeps it synchronized for backward compatibility
+- Injects the validated attribution carrier and legacy UTM hidden inputs into all `form.elementor-form` elements
 - Uses `MutationObserver` to handle forms that load dynamically (popups, tabs)
+
+The existing `epd_utm_*` fields remain available to Pipedrive and Brevo mappings. Additional first/last touch, click ID, landing URL, and conversion URL fields are optional mapping sources.
+
+Run the classifier tests with:
+
+```bash
+node --test tests/attribution-classifier.test.js
+```
 
 ### `epd-form-validation.js`
 - **Phone:** Applies mask `(11) 99999-8888` to `telefone`/`celular` fields; blocks submit if < 10 digits
@@ -185,8 +203,8 @@ Go to **Elementor Pipedrive → Mappings → Add New**:
 Every code change must bump two values in [wp-elementor-pipedrive.php](wp-elementor-pipedrive.php):
 
 ```php
- * Version: 1.8.x          ← plugin header
-define( 'EPD_VERSION', '1.8.x' );   ← constant
+ * Version: X.Y.Z                    ← plugin header
+define( 'EPD_VERSION', 'X.Y.Z' );   ← constant
 ```
 
 The `epd_version` option in the DB is compared against `EPD_VERSION` on every page load to trigger DB migrations automatically.

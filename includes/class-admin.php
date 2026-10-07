@@ -652,6 +652,10 @@ class EPD_Admin {
 						$fields[] = $utm_field;
 					}
 
+					foreach ( $this->get_attribution_fields() as $attribution_field ) {
+						$fields[] = $attribution_field;
+					}
+
 					// Adiciona dados de página capturados automaticamente pelo backend.
 					foreach ( $this->get_page_data_fields() as $page_field ) {
 						$fields[] = $page_field;
@@ -682,6 +686,40 @@ class EPD_Admin {
 			array( 'id' => 'epd_utm_campaign', 'label' => '📍 UTM Campaign', 'type' => 'utm' ),
 			array( 'id' => 'epd_utm_term',     'label' => '📍 UTM Term',     'type' => 'utm' ),
 			array( 'id' => 'epd_utm_content',  'label' => '📍 UTM Content',  'type' => 'utm' ),
+		);
+	}
+
+	/**
+	 * Retorna os campos adicionais de atribuição disponíveis para Pipedrive e Brevo.
+	 */
+	public function get_attribution_fields() {
+		return array(
+			array( 'id' => 'epd_attribution_first_utm_source',         'label' => '🎯 Primeira origem',              'type' => 'attribution' ),
+			array( 'id' => 'epd_attribution_first_normalized_source',  'label' => '🎯 Primeira origem normalizada',  'type' => 'attribution' ),
+			array( 'id' => 'epd_attribution_first_utm_medium',         'label' => '🎯 Primeira mídia',               'type' => 'attribution' ),
+			array( 'id' => 'epd_attribution_first_utm_campaign',       'label' => '🎯 Primeira campanha',            'type' => 'attribution' ),
+			array( 'id' => 'epd_attribution_first_utm_term',           'label' => '🎯 Primeiro termo',               'type' => 'attribution' ),
+			array( 'id' => 'epd_attribution_first_utm_content',        'label' => '🎯 Primeiro conteúdo',            'type' => 'attribution' ),
+			array( 'id' => 'epd_attribution_first_utm_channel',        'label' => '🎯 Primeiro canal',               'type' => 'attribution' ),
+			array( 'id' => 'epd_attribution_first_attribution_method', 'label' => '🎯 Primeiro método de atribuição', 'type' => 'attribution' ),
+			array( 'id' => 'epd_attribution_last_utm_source',          'label' => '🎯 Última origem não direta',      'type' => 'attribution' ),
+			array( 'id' => 'epd_attribution_last_normalized_source',   'label' => '🎯 Última origem normalizada',     'type' => 'attribution' ),
+			array( 'id' => 'epd_attribution_last_utm_medium',          'label' => '🎯 Última mídia não direta',       'type' => 'attribution' ),
+			array( 'id' => 'epd_attribution_last_utm_campaign',        'label' => '🎯 Última campanha não direta',    'type' => 'attribution' ),
+			array( 'id' => 'epd_attribution_last_utm_term',            'label' => '🎯 Último termo não direto',       'type' => 'attribution' ),
+			array( 'id' => 'epd_attribution_last_utm_content',         'label' => '🎯 Último conteúdo não direto',    'type' => 'attribution' ),
+			array( 'id' => 'epd_attribution_last_utm_channel',         'label' => '🎯 Último canal não direto',       'type' => 'attribution' ),
+			array( 'id' => 'epd_attribution_last_attribution_method',  'label' => '🎯 Último método de atribuição',    'type' => 'attribution' ),
+			array( 'id' => 'epd_attribution_gclid',                    'label' => '🔗 Google Click ID',               'type' => 'attribution' ),
+			array( 'id' => 'epd_attribution_gbraid',                   'label' => '🔗 Google GBRAID',                 'type' => 'attribution' ),
+			array( 'id' => 'epd_attribution_wbraid',                   'label' => '🔗 Google WBRAID',                 'type' => 'attribution' ),
+			array( 'id' => 'epd_attribution_msclkid',                  'label' => '🔗 Microsoft Click ID',            'type' => 'attribution' ),
+			array( 'id' => 'epd_attribution_ttclid',                   'label' => '🔗 TikTok Click ID',               'type' => 'attribution' ),
+			array( 'id' => 'epd_attribution_fbclid',                   'label' => '🔗 Meta Click ID',                 'type' => 'attribution' ),
+			array( 'id' => 'epd_attribution_landing_url',              'label' => '🌐 URL da primeira entrada',       'type' => 'attribution' ),
+			array( 'id' => 'epd_attribution_landing_referrer',         'label' => '🌐 Referenciador inicial',         'type' => 'attribution' ),
+			array( 'id' => 'epd_attribution_submission_url',           'label' => '🌐 URL da conversão',              'type' => 'attribution' ),
+			array( 'id' => 'epd_attribution_submission_title',         'label' => '📄 Título da página de conversão', 'type' => 'attribution' ),
 		);
 	}
 

@@ -3,7 +3,7 @@
  * Plugin Name: WP Elementor Pipedrive Integration
  * Plugin URI:  https://bruno.art.br
  * Description: Captura dados de formulários Elementor Pro e cria Pessoa, Empresa e Negociação no Pipedrive.
- * Version:     1.10.2
+ * Version:     1.11.0
  * Author:      Bruno Albim
  * Author URI:  https://bruno.art.br
  * License:     GPL-2.0+
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'EPD_VERSION', '1.10.2' );
+define( 'EPD_VERSION', '1.11.0' );
 define( 'EPD_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'EPD_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'EPD_PLUGIN_FILE', __FILE__ );
@@ -35,6 +35,7 @@ $epd_update_checker->getVcsApi()->enableReleaseAssets();
 require_once EPD_PLUGIN_DIR . 'includes/class-activator.php';
 require_once EPD_PLUGIN_DIR . 'includes/class-pipedrive-api.php';
 require_once EPD_PLUGIN_DIR . 'includes/class-brevo-api.php';
+require_once EPD_PLUGIN_DIR . 'includes/class-attribution.php';
 require_once EPD_PLUGIN_DIR . 'includes/class-field-mapper.php';
 require_once EPD_PLUGIN_DIR . 'includes/class-elementor-handler.php';
 require_once EPD_PLUGIN_DIR . 'includes/class-admin.php';
@@ -91,11 +92,29 @@ function epd_get_validation_map() {
 
 function epd_enqueue_frontend_scripts() {
 	wp_enqueue_script(
-		'epd-utm',
-		EPD_PLUGIN_URL . 'public/js/epd-utm.js',
+		'epd-attribution-classifier',
+		EPD_PLUGIN_URL . 'public/js/epd-attribution-classifier.js',
 		array(),
 		EPD_VERSION,
+		false
+	);
+
+	wp_enqueue_script(
+		'epd-utm',
+		EPD_PLUGIN_URL . 'public/js/epd-utm.js',
+		array( 'epd-attribution-classifier' ),
+		EPD_VERSION,
 		false // carrega no <head> para capturar UTMs o mais cedo possível
+	);
+
+	wp_localize_script(
+		'epd-utm',
+		'epdAttribution',
+		array(
+			'cookieDays' => 90,
+			'siteHost'   => wp_parse_url( home_url(), PHP_URL_HOST ),
+			'sources'    => EPD_Attribution::source_definitions(),
+		)
 	);
 
 	$validation_map = epd_get_validation_map();
